@@ -9,7 +9,6 @@
 
     <style>
         :root {
-       
             --bg-color: #0f0a08; /* 預設深褐色背景 */
             --panel-bg: rgba(20, 15, 12, 0.9); /* 介面底色 */
             
@@ -927,7 +926,8 @@
 
         if (enemyId === "enemy_8") {
             const modeGenerators = [
-              
+                // 1. 基礎計數 (參考 Enemy 1)
+                // 原版 HP 10，BOSS 版提升至 20
                 () => ({ 
                     mode: "count", 
                     hp: 15,
@@ -935,7 +935,7 @@
                     desc: "计数：出一张牌造成 1 伤害" 
                 }),
                 
-             
+                // 2. 顏色連擊 (參考 Enemy 2)
 
                 () => {
                     const colors = ['red', 'blue', 'green', 'yellow'];
@@ -949,7 +949,8 @@
                     };
                 },
 
-              
+                // 3. 顏色變換 (參考 Enemy 3)
+                // 容易觸發，HP 與基礎持平
                 () => ({ 
                     mode: "color_switch", 
                     hp: 10,
@@ -957,6 +958,8 @@
                     desc: "变幻：切换颜色时造成伤害" 
                 }),
 
+                // 4. 數值落差 (參考 Enemy 4)
+                // 平均一張牌能打 2.5~3 傷害，HP 需要是基礎的 3 倍左右
                 () => ({ 
                     mode: "diff", 
                     hp: 50,
@@ -964,7 +967,8 @@
                     desc: "落差：造成前后牌差值的伤害" 
                 }),
 
-                
+                // 5. 連擊節奏 (參考 Enemy 5)
+                // 攻擊頻率極低 (每 3~5 張牌才打一下)，HP 必須極低
                 () => {
                     const mod = Math.floor(Math.random() * 3) + 3; // 隨機 3, 4, 5 連擊
 
@@ -977,9 +981,10 @@
                     };
                 },
 
-               
+                // 6. 總和目標 (參考 Enemy 6)
+                // 觸發極難，HP 必須個位數
                 () => {
-                    const targets = [15, 20, 25]; 
+                    const targets = [15, 20, 25]; // 10 太容易了先拿掉
                     const t = targets[Math.floor(Math.random() * targets.length)];
                     return { 
                         mode: "sum_target", 
@@ -989,7 +994,7 @@
                     };
                 },
 
-                
+                // 7. 數值重擊 (參考 Enemy 7)
        
                 () => ({ 
                     mode: "value", 
@@ -998,13 +1003,13 @@
                     desc: "重击：牌面数值即为伤害" 
                 }),
 
-            
+                // 8. 比較大小 (參考 Enemy 9)
                 () => {
                     const types = [
                         { m: "compare_asc", d: "升序：后牌 > 前牌", hp: 10 },
                         { m: "compare_desc", d: "降序：后牌 < 前牌", hp: 10 },
-                        { m: "compare_eq", d: "同号：后牌 = 前牌", hp: 5 }, 
-                        { m: "compare_all", d: "全序：集齐 升/降/同", hp: 2 } 
+                        { m: "compare_eq", d: "同号：后牌 = 前牌", hp: 5 }, // 同號較難
+                        { m: "compare_all", d: "全序：集齐 升/降/同", hp: 2 } // 最難
                     ];
                     const t = types[Math.floor(Math.random() * types.length)];
                     return { 
@@ -1031,12 +1036,12 @@
                 
                 p.mode = config.mode;
                 p.params = config.params;
-                p.hp = Math.floor(config.hp * stageMultiplier); 
-                p.maxHp = p.hp; 
+                p.hp = Math.floor(config.hp * stageMultiplier); // 這裡設定血量
+                p.maxHp = p.hp; // 記得更新 maxHp
                 p.desc = `[混沌${index+1}] ${config.desc}`;
             });
         }
-        
+        // === 修改結束 ===
 
         availableSkills = [];
         for (let skill of SKILLS_DB) {
@@ -1601,10 +1606,33 @@
 
         try {
             if (currentTargetName && currentTargetName !== '非攻略中') {
+                
+                // === 步驟 0: 動態建立專屬存檔 ===
+                // 1. 處理檔名：把空格或特殊符號去掉，避免指令出錯
+                // 例如 "高塔的魔女爱娜" -> "Battle_高塔的魔女爱娜"
+                let safeName = currentTargetName.replace(/\s+/g, '_'); 
+                let saveCmd = `/checkpoint-create mesId={{lastMessageId}} AutoSave_Battle_${safeName}_{{date}}{{time}}`;
+
+                // 2. 執行存檔指令
+                // 這會在 ST 的 Checkpoints 列表中建立一個永久存在的還原點
+                await bridge.execute(saveCmd);
+                console.log("已執行自動存檔:", saveCmd);
+                
+                // 視覺提示 (Optional)
+                showLog("已建立戰鬥前存檔");
+
+                // === 步驟 1: 修改變量 (狀態變更) ===
+                // 存檔完成後，再修改變量，這樣讀取存檔時變量還是舊的(未攻略狀態)
                 await bridge.execute(`/xbsetvar 世界.妈妈.${currentTargetName}.状态 3`);
                 await bridge.execute(`/xbgetvar 世界.迷宫攻略.当前攻略对象 | /xbdelvar 世界.迷宫攻略.可用名单.{{pipe}}`);
-				await bridge.execute(`/xbsetvar 世界.迷宫攻略.当前攻略对象 非攻略中`);
-                sendMsgViaDOM(`戰鬥結束！成功攻略 ${currentTargetName}！`);
+                await bridge.execute(`/xbsetvar 世界.迷宫攻略.当前攻略对象 非攻略中`);
+
+                // === 步驟 2: 發送訊息 ===
+                const success = sendMsgViaDOM(`戰鬥結束！成功攻略 ${currentTargetName}！`);
+                
+                if (!success) {
+                    showLog("訊息發送失敗，請手動發送");
+                }
             }
             
             setTimeout(() => {
@@ -1613,41 +1641,57 @@
 
         } catch (e) {
             console.error("结算失败:", e);
-            showLog("结算发生错误");
+            showLog("结算发生错误: " + e.message);
         }
     }
 
 	function sendMsgViaDOM(message) {
-    try {
-        // 1. 获取父级窗口的 document
-        let targetDoc = document;
-        if (window.parent && window.parent !== window) {
-            targetDoc = window.parent.document;
-        }
+        try {
+            // 1. 尝试获取顶层窗口 (SillyTavern 主窗口)
+            // 使用 window.top 比 window.parent 更安全，防止多层嵌套
+            const targetWin = window.top; 
+            const targetDoc = targetWin.document;
 
-        // 2. 找到 SillyTavern 的输入框和发送按钮
-        const textarea = targetDoc.getElementById('send_textarea');
-        const sendButton = targetDoc.getElementById('send_but');
+            // 2. 查找关键元素
+            const textarea = targetDoc.getElementById('send_textarea');
+            const sendButton = targetDoc.getElementById('send_but');
 
-        if (!textarea || !sendButton) {
-            console.error("找不到 SillyTavern 的输入组件");
+            if (!textarea || !sendButton) {
+                // 如果找不到，很可能是因为开启了"沉浸模式"(Immersive Mode)导致UI被隐藏
+                showLog("错误: 找不到发送按钮 (请关闭沉浸模式)");
+                console.error("DOM Elements missing. Textarea:", textarea, "Btn:", sendButton);
+                return false;
+            }
+
+            // 3. 填入消息 (优先使用 jQuery 触发，确保 ST 识别到变动)
+            if (targetWin.jQuery) {
+                const $ = targetWin.jQuery;
+                $(textarea).val(message).trigger('input').trigger('change'); // 同时触发 input 和 change
+            } else {
+                // 降级方案：原生 JS
+                textarea.value = message;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                textarea.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            // 4. 模拟点击 (优先使用 jQuery 点击)
+            if (targetWin.jQuery) {
+                const $ = targetWin.jQuery;
+                $(sendButton).click();
+            } else {
+                sendButton.click();
+            }
+            
+            showLog("指令已发送至 ST");
+            return true;
+
+        } catch (e) {
+            // 将错误打印到游戏屏幕上，方便调试
+            showLog("发送失败: " + e.message);
+            console.error("DOM Send Error:", e);
             return false;
         }
-
-        // 3. 填入消息并触发 Input 事件 (让 ST 知道有内容输入了)
-        textarea.value = message;
-        const inputEvent = new Event('input', { bubbles: true });
-        textarea.dispatchEvent(inputEvent);
-
-        // 4. 模拟点击发送按钮 (这一步会触发 LLM 回复)
-        sendButton.click();
-        return true;
-
-    } catch (e) {
-        console.error("DOM 发送失败:", e);
-        return false;
     }
-}
 
     function shuffle(array) {
         for (let i = array.length - 1; i > 0; i--) {
@@ -1692,7 +1736,7 @@
                 if (targetingMode && targetingMode.skillIndex === i) cls += ' active';
                 if (targetingMode && targetingMode.type === 'MIMIC_SELECT' && s.id !== 2) cls += ' targetable-skill';
                 
-             
+                // 獲取圖片，如果沒有定義則使用透明圖或預設圖
                 const imgUrl = SKILL_ICONS[s.owner] || ""; 
                 
                 return `
@@ -1709,7 +1753,7 @@
 	const fsArea = document.getElementById('future-sight-area');
     const fsList = document.getElementById('fs-cards-list');
     
-   
+    // 只有當 Buff 大於 0 且 牌庫還有牌時顯示
     if (buffs.futureSightTurns > 0 && deck.length > 0) {
         fsArea.style.display = 'flex';
         
