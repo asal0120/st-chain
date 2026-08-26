@@ -1,0 +1,2186 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>新作前端骨架 · 版面雛形</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&family=Noto+Sans+TC:wght@400;500;700&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   新作前端骨架
+   視覺方向來自概念圖 1.PNG（中文版）：
+     頂部時間列 → 書物風本文區 → 四個頁籤 → 底部角色帶
+
+   ⚠ 這是「版面骨架」，不是完成品。
+     所有欄位名稱都是中性佔位（狀態A/B/C、階級、標籤），
+     等世界觀設定文件出來後再換成正式名稱。
+     世界觀是原創的維多利亞 + 蒸氣龐克 + 神秘學，與任何既有作品無關。
+   ========================================================================== */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --serif: "Noto Serif TC", "Songti TC", serif;
+    --sans: "Noto Sans TC", sans-serif;
+    --display: "Cinzel", "Noto Serif TC", serif;
+
+    /* 內容最大寬度：手機幾乎佔滿，桌機加寬但不無限拉長。
+       本文、狀態面板、控制列共用，確保三者左右對齊。 */
+    --contentMax: clamp(20rem, 82vw, 68rem);
+
+    /* 卡片高度。本文超出時在本文區內部滾動，不把卡片撐長。
+       獨立開啟時 100vh 就是整個視窗高；在 iframe 裡則會收斂到
+       宿主設定的 iframe 高度（reportHeight 的下限 720px）。
+       使用者可在「顯示設定 → 卡片高度」改成固定 px。 */
+    --cardHeight: 100vh;
+}
+
+/* 卡片自己管高度與滾動，外層不要再產生一條捲軸 */
+html, body { height: 100%; }
+body { overflow: hidden; }
+
+body {
+    font-family: var(--serif);
+    font-size: clamp(15px, 0.95rem + 0.2vw, 17px);
+    background: #1a1512;
+    transition: background-color .5s ease;
+}
+body:has(.rpg-v7-root.light-mode) { background: #d8cdb8; }
+
+/* ==========================================================================
+   主題色票
+   沿用 reader_8_2 的機制：深色為預設，.light-mode 覆蓋變數。
+   rpg-core 的 setTheme() 會在 root 上切換 .light-mode class。
+   色值改為概念圖的黃銅 / 陳舊紙張 / 深棕木質。
+   ========================================================================== */
+.rpg-v7-root {
+    /* ── 深色（預設）──
+       所有顏色都必須走變數，否則切換主題時不會跟著變。 */
+    --bg: #1a1512;              /* 最外層深棕 */
+    --shell-hi: #362a21;        /* 外框亮面（漸層起點） */
+    --shell-mid: #2a201a;       /* 外框中段 */
+    --shell-lo: #221a14;        /* 外框暗部（漸層終點） */
+    --brass: #c9a227;           /* 黃銅主色 */
+    --brass-dim: #8a7020;       /* 黃銅暗部 */
+    --brass-glow: rgba(201,162,39,.22);
+    /* ── 閱讀區（最關鍵）──
+       深色模式下閱讀區必須真的變暗，否則深色主題沒有意義。
+       「書物感」靠字體、行距、首字下沉、邊框來做，不靠固定的泛黃紙色。 */
+    --paper: #171b22;           /* 閱讀區底色：深藍黑 */
+    --paper-edge: #d4c4a0;      /* 外框上的淡色文字 */
+    --ink: #c3bfb4;             /* 本文字色 */
+    --ink-dim: #8b8578;         /* 淡色（副標） */
+    --ink-strong: #e8e3d6;      /* 濃色（標題／首字） */
+    --q: #d9b98f;               /* 對話色 */
+    --emph: #c9a227;            /* 強調色 */
+    --dlg-bg: rgba(255,255,255,.03);
+    --dlg-border: rgba(201,162,39,.35);
+    --line: rgba(201,162,39,.28);
+    --line-soft: rgba(201,162,39,.12);
+
+    /* 頂部列 */
+    --topbar-hi: #3d2e22;
+    --topbar-lo: #2a1f18;
+    --topbar-fg: #e8dcc0;
+
+    /* 頁籤（未選中） */
+    --tab-hi: #33261d;
+    --tab-lo: #251b14;
+    --tab-fg: #cbbfa4;
+    --tab-hover-hi: #3f2f23;
+    --tab-hover-lo: #2b2017;
+
+    /* 面板區與角色卡 */
+    --panel-hi: #2b2018;
+    --panel-lo: #211812;
+    --card-hi: #2e2319;
+    --card-lo: #241a13;
+    --card-fg: #e3ddd0;         /* 面板上的文字（深底 → 淺字） */
+    --card-fg-dim: #a49c8c;
+    --portrait-hi: #6b5a48;
+    --portrait-lo: #4a3d30;
+
+    /* 閱讀區的質感疊層。深色時用極淡的暖光暈，淺色時才是紙張斑點。 */
+    --grain: rgba(201,162,39,.05);
+    --grain-2: rgba(160,140,180,.04);
+    --vignette: rgba(0,0,0,.22);
+
+    /* 紙張貼圖的混合方式（深色：柔光帶出細微起伏，不會讓底色變亮） */
+    --texBlend: soft-light;
+    --texOpacity: .34;
+    --texSize: 128px;
+    /* 「外部貼圖」模式的網址。
+       故意留成 none：CDN 上還沒有這個檔案，寫死一個不存在的網址
+       會讓使用者一切到外部模式就吃 404。實際網址由使用者在
+       「顯示設定 → 紙張質感 → 外部貼圖」裡填，或等資源上架後改這一行。 */
+    --texRemote: none;
+
+    /* 控制元件 */
+    --ctrl-bg: rgba(0,0,0,.3);
+    --ctrl-fg: #cbbfa4;
+    --track-bg: rgba(0,0,0,.5);
+
+    --moon: #a83232;            /* 紅月 */
+    --stat-a: #c23b3b;          /* 狀態條 A */
+    --stat-b: #3b6fc2;          /* 狀態條 B */
+    --stat-c: #46a06a;          /* 狀態條 C */
+
+    /* 卡片高度固定，不隨本文長度增長。
+       本文超出時在 .stage 內部滾動，而不是把整張卡片撐長。
+       用 height 而非 min-height：min-height 只設下限，內容一長還是會撐高，
+       那正是「全文模式無限向下延伸」的原因。 */
+    height: var(--cardHeight, 100vh);
+    background: var(--bg);
+    color: var(--ink);
+    transition: background-color .45s ease, color .45s ease;
+    position: relative;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.rpg-v7-root.light-mode {
+    /* ── 亮色覆蓋 ──
+       整體翻成「陳舊皮革封面 + 亮紙」：外框轉為淺棕皮革，
+       文字由淡色轉為深色，才有真正切換主題的意義。 */
+    --bg: #c9bda4;
+    --shell-hi: #e8dcc4;
+    --shell-mid: #d6c8ab;
+    --shell-lo: #c2b294;
+    --brass: #7d6414;
+    --brass-dim: #9c8438;
+    --brass-glow: rgba(125,100,20,.18);
+    /* 淺色模式才是真正的「泛黃紙頁」 */
+    --paper: #f4ecd8;
+    --paper-edge: #4a3f30;      /* 亮色時「外框上的文字」要變深 */
+    --ink: #33291f;
+    --ink-dim: #6b5d4c;
+    --ink-strong: #1a1410;
+    --q: #8c3418;
+    --emph: #8a5510;
+    --dlg-bg: rgba(90,60,30,.05);
+    --dlg-border: rgba(140,52,24,.35);
+    --line: rgba(125,100,20,.32);
+    --line-soft: rgba(125,100,20,.16);
+
+    --topbar-hi: #e3d5b8;
+    --topbar-lo: #d0bf9e;
+    --topbar-fg: #3a3025;
+
+    --tab-hi: #cdbb99;
+    --tab-lo: #bda98a;
+    --tab-fg: #4a3f30;
+    --tab-hover-hi: #d8c7a6;
+    --tab-hover-lo: #c6b492;
+
+    --panel-hi: #d9caac;
+    --panel-lo: #c9b795;
+    --card-hi: #e6d9bd;
+    --card-lo: #d3c2a2;
+    --card-fg: #2e251e;
+    --card-fg-dim: #5c5045;
+    --portrait-hi: #c0ac8e;
+    --portrait-lo: #a8927a;
+
+    --grain: rgba(150,120,70,.09);
+    --grain-2: rgba(150,120,70,.10);
+    --vignette: rgba(140,115,70,.13);
+
+    /* 淺色：overlay 只改明暗、不污染色相，紙的暖黃才保得住。
+       （multiply 會把中灰貼圖整片壓暗、讓紙變灰濁。） */
+    --texBlend: overlay;
+    --texOpacity: .3;
+
+    --ctrl-bg: rgba(255,255,255,.35);
+    --ctrl-fg: #4a3f30;
+    --track-bg: rgba(90,70,40,.22);
+
+    --moon: #9c2c2c;
+}
+
+/* ==========================================================================
+   外框：整張卡片包在一個黃銅鑲邊的深色外殼裡
+   概念圖的四角有裝飾齒輪，這裡先用 CSS 漸層做出鑲邊質感。
+   ========================================================================== */
+.deviceShell {
+    background: linear-gradient(160deg, var(--shell-hi), var(--shell-mid) 40%, var(--shell-lo));
+    border: 2px solid var(--brass-dim);
+    border-radius: 14px;
+    padding: 8px;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.08),
+        inset 0 -2px 8px rgba(0,0,0,.4),
+        0 6px 24px rgba(0,0,0,.5);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    transition: background .45s ease, border-color .45s ease;
+}
+
+/* ── 四角齒輪裝飾 ── */
+.deviceShell { position: relative; }
+.corner {
+    position: absolute;
+    width: 26px; height: 26px;
+    border: 1.5px solid var(--brass-dim);
+    border-radius: 50%;
+    opacity: .5;
+    pointer-events: none;
+}
+.corner::before {
+    content: '';
+    position: absolute; inset: 5px;
+    border: 1px solid var(--brass-dim);
+    border-radius: 50%;
+}
+.corner.tl { top: 3px; left: 3px; }
+.corner.tr { top: 3px; right: 3px; }
+.corner.bl { bottom: 3px; left: 3px; }
+.corner.br { bottom: 3px; right: 3px; }
+
+/* ==========================================================================
+   [1] 頂部時間列
+   概念圖：左邊懷表、中間「倫敦時間: 23:45 | 紅月相」
+   欄位名稱一律中性：地點時間 / 天象
+   ========================================================================== */
+.topBar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(180deg, var(--topbar-hi), var(--topbar-lo));
+    border: 1px solid var(--brass-dim);
+    border-radius: 8px;
+    padding: 7px 12px;
+    flex-shrink: 0;
+    transition: background .45s ease, border-color .45s ease;
+}
+
+/* 懷表 */
+.pocketWatch {
+    width: 38px; height: 38px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #f0e6d0, #c9b896 70%, #9a8a68);
+    border: 2px solid var(--brass);
+    box-shadow: 0 0 8px var(--brass-glow), inset 0 0 6px rgba(0,0,0,.2);
+    position: relative;
+}
+/* 表針 */
+.pocketWatch::before,
+.pocketWatch::after {
+    content: '';
+    position: absolute;
+    background: #3a2f28;
+    left: 50%; top: 50%;
+    transform-origin: bottom center;
+    border-radius: 1px;
+}
+.pocketWatch::before {   /* 時針 */
+    width: 2px; height: 10px;
+    transform: translate(-50%, -100%) rotate(var(--hourAngle, 210deg));
+}
+.pocketWatch::after {    /* 分針 */
+    width: 1.5px; height: 14px;
+    transform: translate(-50%, -100%) rotate(var(--minAngle, 270deg));
+}
+
+/* 紅月 */
+.moonPhase {
+    width: 17px; height: 17px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 32%, #d45a4a, var(--moon) 60%, #6b1f1f);
+    box-shadow: 0 0 10px rgba(168,50,50,.6);
+}
+
+.timeText {
+    font-family: var(--sans);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--topbar-fg);
+    letter-spacing: .04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    transition: color .45s ease;
+}
+.timeText .sep { color: var(--brass); margin: 0 6px; opacity: .7; }
+.timeText .dim { opacity: .72; }
+
+/* ==========================================================================
+   [2] 本文區 —— 書物風紙張
+   概念圖：泛黃紙張、首字大寫、章節分隔線、可滾動
+   ========================================================================== */
+.pageWrap {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    border: 1px solid var(--brass-dim);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--paper);
+    transition: background .45s ease, border-color .45s ease;
+}
+
+/* ── 紙張質感：三種模式共用同一層 ──
+   ::before = 紙纖維貼圖層，圖從哪來由 --texImage 決定：
+       none（純色）／ var(--texLocal)（內嵌 data URI）／ url(外部網址)
+     切換是改一個變數，不新增／移除 DOM，所以不會觸發重排。
+   ::after  = 大範圍污漬與邊緣暗角（三種模式都保留，這是純 CSS 漸層）
+
+   貼圖是灰階的，靠 mix-blend-mode 與主題色混合，
+   所以同一張圖在深色（soft-light 帶出細微起伏）與
+   淺色（overlay 壓出紙紋）都適用。 */
+.pageWrap::before {
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: var(--texImage, none);
+    background-repeat: repeat;
+    background-size: var(--texSize, 128px) var(--texSize, 128px);
+    mix-blend-mode: var(--texBlend, soft-light);
+    opacity: var(--texOpacity, .5);
+}
+
+/* 內嵌的無縫紙紋（128×128，四階值噪聲 + 纖維紋，環繞取樣所以四邊接得上）。
+   放在變數裡而非直接寫進 ::before，「完全本地」模式才能用 var() 指過來。 */
+.rpg-v7-root {
+    --texLocal: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAQAElEQVR4AZzd55rdSHKtYayS18Xqh7z3/oJlZ4YHb6IWduwkit06ePgxfGRkAhtVrCZnPv7qr/7q25//+Z9/+5M/+ZNvf/zHf7zkn/7pny7993//97/93u/93uIP//APl++P/uiPvvGTf/mXf/lt1qtj/83f/M03sb/4i7/49td//dff/uEf/mHxt3/7t9/wT//0T9/+9V//9ds///M/f/v7v//7FfuXf/mXb//2b//2jZTPL/7v//7vK/cf//EfV55aeaD/3d/93TfQ9Ww9nx78fK1vT/V0a4mptdbMVSsH8uzFWTkn52G/9kiy/+AP/uAbXZ5zcAZm0F+9cxEzm96gOxNx64DOr85cnUmevnroK68+/taIdS1xtpgc85n/z/7sz9a9+/jlL3954Be/+MWSv/rVr45v374driRHclGbhBy5aif6lP/93/89ps7eEef7n//5n4NkY+qzvzXFJ3InM7brrdezMfqPkKc/CT26f3qpTy/5RU11ko3qlXyYdnUS4qDvfOWXJ2Yus5Lg+/BbcRP++7//+74RCtE4vWhQGq/kt9DE4XhwkhCLJOsBY8x48vJ/fHwc+LVf+7Xj13/912/Y/ElWD/VJVi6/uPzf+I3fWDW1+cAGfaf+1uqXZH0w7Kn7JJ0Hian3DMyF4/NKrnmTvM2afO+3rlkKO8nh0nOSXH4xNGZes5hv0lk/NH9qrMlXJFnDq+3h0fUp7MbIHiZ9Ik8NWfb4tKvLrV45fdb7rd/6rQP03/zN3zzImTPr+J+Qo66wi3yzJ1kPYXJJPjmtqTSDeUDnl4eps8E3UaP2d37nd+59NT7z6WZ7wmxF/KMNprQQm7Qg6HzoAmThR+3V/Pz0JtehJJf0ZHoqycIu9VXW7yme8Ms5zovEqd6f0sbJWddPwfRVF6tO1m7vJId92aPzKPZdxOTAQSfXvpMc+6VvMSdqW5+NqSe5P3z6I8nbA5hc9nFeyaXLM5P5ipnv7wEsnGRtUHKSw5VkLciHJPdiHc6AZfocILxuii8zpT7Slx5+OtRN2n/65GH6pq5mzsPemflT17e5dDRev95wdjjOi4QcNXNPtXdf/WSxljxMH/9EzFrm4GeDDnrjcmC+c9SD/vY9QBNJxWiD+morhhzwk5NZw8/G1PXgIztYkvUg9kklPa2kp3h/EJOsh7RxUj6qk1Bf9j7sJ5Lr6785zW6vcHNA50dzqrPR/VUe47JvDNf6kMnVZ8Y6357Ln1xzqoN1oUdhi4G+vgdwMA7Lqx50h6QpCTmV4uCb8IFPrvofIQ+zpjafWbxm+fQj+Xfk/PZv//ZBNlZdjVrQ+cna1afNBz7QQbefJOv83Rgs4/xNTA7kd5bK+sg9x1zdr3xx/UBXw19mbn16gC0fs3bazbm/B1DoEEGf7IuJtYGmkKOW3GPiBoENJVlPOL0++nmG65dDhacUntTCFoNkEnSx0vw++SRf45VqUbty+ujms48d80+fvYNPrKgvSYy7zoCSZL3BkixfkqNXkjef+RojkxDrex+KNbqmGcwy71ft+j407MGQk248eX+18KO1auj10YsYpu1meG2CjuqVXq2oTWL3qZ3Imba1C3/j5I74T2Ef9okk60tVknWTjvPil2NNveYa7MmM7bo8PUBvfOr1kfyggz7RZ8ec65tACvbhFfBBHPRzn+sXWw65HOdv4nxd3A2DocDP/q//+q/DN358RUwv6HO2WwfrqQYf6k+yPjliSC47uSTf/DT4RKA+8cJXvZIvyeEy09yXWdmgT+yHTYIuT4/Orycd/KBPkqz9y0US4mbm0vXoOqR1uz69PlIu3r4EeD1MvM5LXxlsr3r2E+p7yMk1sOHQyekWL/x8SdYnSg/oU0l3Q3pz2I3tUmzm0iHP/KB3fvsBm38ilx/87V2ZZN0kc9VnreTyH+eVZP0wSlyPn8Ja1i1sNep3rAXrJ1nnxy7y6eKgQz+8fRPI0QI6urgiMT4SfKCDDvpXzLiBwEeWJIfLQ9GHhKyPv/CBLYcEfdKnXqy6OFs96PVV8idZN9mc9t8bQzof0IscOAN7Ugf67JfkuzdYcq2VXLHkZR/bpd/etz5+65uNnJgNfOuPgQ5k4nUBPgdBskGvr68Xdg9PXF59/J07uTYzbQMnWS61UO/LhC8RpHWK2E8hd+aw9TVTYYNtRvqs4edTi8b4xNbAn7+p5xMDHfyg8+tB6gc2+YRYaZxdnWQXa0B/7Dp7IkfthwGL/VQn2cl1c6oneXvNeIo8ZZ4oN9MimhsQFpmSPmmcz80GX9HvGJc1kGR9KpN89ykS9wnA1M3KR8LMPrXmB1/jYmqP83IWsK/OZd4ds5fGmk/aiz6kXhM+scm59NojyS8H6sgiVvjErUeag0R9csr6HsDGi43Dgfi6OA+I7ufQ00+vTw30cpA9wG6gQ5IdgGSDjiTrIVOfXHpnMoM12BNroj76jpmw+1tDtrec3ebrTEkOV5J1k8zP3kmuuDprQ58f0XXtFWaSr7Z92KX58ujyCrt5JLt59I8kj58gCyG5NnB8XkmW5kZNHECS1asLWWAuxoa4Acmd+snkWivJOuTjvKxzivWrOjnZ52LPT4BPQuEHm0Tz9bRQcq1vJvPD3JVPevctVtQ7U5KPLPwludZLLmmGxipbR/JV0vWG+QobbPLOt3GviV3yeZ2Rk/rk7zSP3yHuB5hcG+qQhgAbyRVX50YU/dr7KykH4k+Sr/2mnH560WfCr677SuK+vJFkPahJlj+5pP2oU7/31LeI0Uk4a9ChHnLAR6K6OKxX2EXu5P45gAQFZGkiv02gepL1mnYD0RsoR31ryd2u78lvI5DTtfQEu7CPhyvJugmdJ3nZfGb1CfBJePqUismD9taBdc0Ec4PeWeng50NtPjr4QceM0WE90OVYG2xUJ8X5wCafkAdrizf3w4Z7KHQ4HHJSH1nEe4j1TVsc+j8daIeY0sYdvBo9fQ0k9QE/6NO/2zOneZVyxcEHPjz5+It4sSckr4csyfoyyC+vvdnlOK8kb3lyuwbJbj6dD3TQ0f6VfOJfMeP09XMAyRYji2B1seTaZJLD5aYVN43On1w/9PAg+AYR+zeJYugaZDdAoj4zWL8kWZ/wJJZ705fj8zcz7Xjy4ZNQ2IWPbi9qtUqybpQ5OpPZPZigwz5rmx/1k2z10Mt+6GBX0sWS3Htj11/JB/asrc0H62LqctQubLp4PTzpfDPGhsMiQZdT2A4xyeGik0nWgVrcIAYja5PHebkJ+kJP8gkxiJE/hTyzwUywFrvIKfpVF5d/jrf+4wu9JFn7St73q3dzpuSfdI0p59r81i+1SXmgN05ab67BV5q7fhCkuN9sCKCJGtDJ47zcIDes1CaRZD25Z+r6ZQj1elqHRPXG+LDb1tVjojFbDHS+6iQ7uWZJ3qXZfSrg0+khBL89ILlq9NHPXIUNtpnpZgCdrzESfBP775lXisud8P0c9Jt55oCZZj+6PPk49/pxP7mncX9jR3co6EF5xXnVOTS+xir5i3gR1y+5/quiIWBAEgZ12EiyZnJDoF6vfX0+iOsvF2xzyCflQEzehE9+pTy0rrI+PbH7xdtHr2Kt6iQ7eT1c3XeS++z12VFb9EBy9Ulyn1fr5Jqpc7LROMle3wQyJJOTlfDxsQbrgsd5uXE7NoIzvH7JVw+9fw6GhVzSLPogyb1JPfkmyRXffcfnZTZ42MxO+iQUdhFXllwHrKc1zWMumJFNoj46xCb1tU9tOXTQIQd0fcn/C61tzW5bC+Lr7wPY8KQHUdlDmtLro7Y8Oh/ofHo6dBI91A5EThx0Emnr76up0Uc/fUHH1NnyCttrFfImYmyyqKteuefUL7fsPvNCnLR3sFGfDfKTybVf8dK+lfxqMXU9UL98cdDtAXQ+0Iu6DwngbAI5kWihJOvruxvlxlV6klAff3LlJln/4ER/64De/nTUX13cusX6cGh8dLJ5/PVNyV+SaybzlcbYnT/Jcus/0bfUb32wSfODDjq6v+njh1hhgy0XtfkK34TfAw/+2v6DGn3CJw/rR8FJ3l6vDsIr4gmvJH43nAR9wrd/ndQzuQ7WITqwYpP047ySrFncED31Kmx+vQrf1JvbOadtJvCp0+s4ryTry5w+/GSSew42P9SC/sTMFW8uP/hIayfXeSTXWknWB0y8eVNPru+hnF9y1Yij/ZKrR/Isj/NKXrH1H4McFjqsxVF7Nj/r1x+B3DAYhuxNZEOeOhhQL2tM+CZuDuozg1o9kETbdWP4wY8k6ybS+UFPrpok63CT6xDNDJ8WdH4+2AOSV9/2I/WfmBVmJ0EHvbCdQSUd3Xfzfo7UQx6pB8kG/adQ83Gcl40Wm+9hkHBA8MqA1wmbnHZ9/BN+fayRZN2oDtlDNKyDlQNzQC30IzF1ffkq6WCDPum8etDRVyJf4ae3Vi829pgcfjmFr/DZC6of2yVm36DLm/ApSUK8fQjF1AkkrzifGOhl5q2fAxh0X6xF5ESeRknWJ4o+G9L55O192RDTk6xNBxt0yIOeZH0k9lx5ZuiDlVxzJi8pDrmt17voO5EDN9nNB50PdNAL+6eQ2xw9Ubty5jz5GifNTMqrpE/4C//5oftYf1/NJ9CncuIQa4sXPjHQd/h3zoXWq7tSnJ5k+fWoj58O/gkf6jOTV1lfodPmL35+AbYc9e1jPfBNmscnLj+55qUXcdSWm7y+1HjQjs+LjiTLk2R9kBj8oE+SV06SOyQXdVi3JFl9k5eU1/wk69wfvwewEY12mVxFSY55aYoka1G1UF8cENwAN4t0wCT7q5vTev1Qu1LPwpdcM3Q+c4FdSU9yHcD5cw59d/TS14xPkg/isA924aPrAzqqi0/Us+V8hfhOc3d/bX1Rm5w1988B+vro64HkA93rgnx6TYkVOXQS6vtqdQNwnFeS8/fj7WuZWFGjVo/Cnn52Y2TXJXfMPRFXg70PG2Ly6OjaZOGH3PrsweaS3A9Zcu3Xg5Zc+jGuJOvDk1xSSB89STaSVzx56XLkgr6jdpJcb6j1cwAH8/SNUDdlgxqTpQvwTxpXWxwiasuh832FeJFfrEWfsfqmNJ8NJyHWD5ZaIw/6kIUNeeZyLoUNsZ+DPmYAvTXtQU7kQF797gnY/IVdnnyNkeYnIXdK+vpTQA+AdFpJ7qfRE+u1BTroO32t1C8vefVJLl28MbJYtyRZf1KQW/Snyyfnq0wM/JXywIckRy9+eXoUOeAn5bh5+5nwT+SqAb3o69ULMTVdX196cs2UZJ23HCQRXm9HD4UZ1IAO/gkf5EADcifJWksc938LsHCHNzBqk+JPJFfDJOt1JxdySejlQIpDmTob9ZFqoH6iL3+ZsepJ1ie+B3J8Xg6DmuSeVR890XqSn4R5MGcUBz98HyNeH70+cfBNpq86WfSy/pyNPhHfaR1/8r5XvcXL208Ck+tmHufl8PrK6JNWm+QjvUa8ZkDn33Hw5Wy9fiVZTzh/j2f/qQAAEABJREFUknVDbCy5/NbXp9Ja4CNBB93aqO7V+Z//+Z/rn5/xQbxzssFH6lOsiePzMiOVj17YRW31KetXk2Tt043pXo/Pi/2p3iK57keSVScHyeWnt1fXPMZlzZrJVVObTHLcPwdwEBMH5d/vge6QIIeEzYEuB+LFTQC/nPrpOzaglxwxsrAn9ZP8pDUm1v2P//iPA/xyQIe6ibXZciZ8qK+18nfkgb/7ofMVNtrvKym/sepkEaPrBbY9gx985iXZoKP++08BBvbEkEVj8B/nleR+EvvkeQrLcV5yoQd5utavqcuf9VMXS15Pa3Lp/JALOpLrjWHOYq25WTofzGWgJGsvydU/yeFKLikXfKieZH0NtbbXqFeq1zq9mK/Iqy7eXH490f5086F7Ic1f5s1zE1GfDys8BHwQB10v6G8t3N8DGA42VNhzeDbqq7QZulhho71snC5Olmk3R4xfPeiFvWP95HVj2EjibNcNmzViqC/JW461Guss5I686WOX1tcm5drj/r2BGFpDmg9TZyfXrDbmBoION9aDQrKRXPlqYR2YhTx911/4sFByJSdZn44zuGSSw6UxPEXYdcMkWYc5a5MoX/7k+sSqhZpKelFAFyvWRDe5x9lJ1szWP86L7xT3L7304KeD3U/InfipyEuyZv90LdE6s6ivTZ/wl+nf+9Y2t3vh5mC3+Rqv5IOb6gEjwacezU2uvfAtbGDiIKZdnR9eJ6BDnER1cke8zHo+Nuito/N5nZG1veJK/XIgp/U9bPb009U3Xw86H11cDdilfhLi6DqVfIWPLr9YC/rWR7IhH2p3PEgeFBL09TSevyWvG5vk9Fy/5OlTqbd1rEl/+8ehEidXi/ef1imSY/HktRAbasivEId4JT3J/Sljz4G7pnUN72bBQdoI+EHfkdcYyVYvT0+yWGvCL8c85kpyv2H6qSInPnmozycteb359PuKfW3rm5mc2ENtNXR5oE/kYvrU2NP9PYBhDV28QuCVUp8cmyHrq+STj/pINvQBnV8+WdioTbKtV5IcLoPbgEOk88ENAn3CJ4/kp6ulJ3l78JLcP4SybpJ1w81iJnuAfaD+Sj55JHa9PZOrL1st6CW55koueZyX+dH57YH+FeJFjtqzzfplHbO9/RyA0yCgT/gKf5LVqL/Vl2QdGBtJ1gEnOVyGAL2wDQi+JKuGjiSrp/X1BB02Ab7kqmP38OVAnB90ax7nRceprp9LkGw1kE+CP4mU9YMmh2vmwi71kdbCKjx/S3LvR399i3X4JnzonmZs6uI74nwkqlsvOecwcF8NPlXgA79XCl/hp4uRP0LOjn7gby2dD/QiTiet6xAnx3kl1w3hd9jNO0PfPURJbp9cfcnWssFXGtNXrJIONujovPTCt6MGXae59Vl3p3ty8+ChAP0JMTedbDy5vhR1vfUfg2pYvNQ3ZWNkhzMUandDlXKnrp/D4Edj/IWfLg/7g8GG2ISvTP+ut/fMrU423xydj26fDhMOtJL+dND8cpLr0PXSx/o/ouuT5gEd6sjCLnyoTVqv64qBH/Rzxo/1OjqV9bWvGzE4X2GDLQdeJxO+ifxp09VDTC0f2EUcyesT2wfMTaDbWLFBsCurs4u66qRDwJ5rDeubpzOSvvaDDnGYv/DT62eDD/xof3IniRHWl6TObMZiZtSutKfmV9coufrRxZPc93z9hRADFkNODDttOp+hk1fjZDT9/EsWzW0+2XXoepCQW5rjsCf1k/xkaW1l/VOKscnStfnLjM0Zj/Ny2A53wofpo/PBoeuDrtc1nmTnIBunT/j1Ar2wUZuc9n5u94+CDfr0VPGXxr06itcTxJ5QWz+9B8PHrqyfD2wHl2Q9rUnW1+/ksrsp8ulgp58OecXBTGb8OC9rm6Hzkfa879WsYvzihe2PXuCTg+ZXt8aOtc8R1n7NazaYt9LDQG+8MT7wJ+9nxqcvrIH1H4MMuA/MNzFwsYkn9o3stno91Vp8xvnYpDxSDvj50Ho+yOMnJ3yFvzrJxqyvn4R1yCLfLMl1qA7TQU+SKyZP76K2ffR11oWN3Z759NmDPnuzm0MHe8c6fGRZfyHEE6GhQsODD8m1qSRvn8S5cYcBPk/iV4jD0+vn4eT+Spq1M86fvGbRB9ZNcszL/OBLrhi7eyTZoBd2cuUnWfu1Bqw/56E/0Tyys5FIrt7WmWse4xJjknLcE5KN6qRYYavb11GTZL1Nkkh50+8fBBkY3Sy9TB/dIjqRSLL+XNzF+CB3op8bDn454HeYZGHvqPOXR/0PTsBDxEfyg86nVi/rgI76SXnyq7PpRX7RI8l335j5RLkJboD9O5edJPc32Prpby1rk7XJncb5W0tX2/2ywVfUiTun3/3d3z3ofNDHudvT+lHwMa4kb0+ITRWbhE17hZC1+wrjcyBkc+iQW9gTNU80nzRHknWYhk+uG3Kclw3ZGOjJtY8ztPbDp2ZKuXzgR/Kqs551zWVW+7FPEvXRn2iuen30m/Ps6yXX2sklzWVGyJ3wuZluPB3y5SSv+satOzEL1s8BOrxBsW+sdqV8m5v4Zgd84nLpfGx9kWTNYXGHwkcu5/lb/XzV5YDvTFk3VIyviIFt7Yn1p02feY3Xx57Ih7g1rJ1kzZHESDdicuTr4QxAr48s/GCTpbY1wd6ZfnrRQ645kqy3sxj/xFz3nwIMbhdJ7o0l4Xqzk8sn3wKoTia58xXX5+n0xPYV1SfTkwsx8FdOvTleZdBHHPJB9wmwrrlseuJQ2GJyJklu08zgSLL2Y34zWKOwd8T4zJFkfR+RXD2OcSVZVpLVn2HNMmfkY3d2unwkIdY6c03zOhOYiS2+ks/f2vPt5wBNtgFFJBSTqJ8s9bPpZdp6JNew5/pr03wlyfIlWZvh16eSPpl+c3sg0IeDXsTVznnYP0Iu1EKuNZMcLgc44Uuy9uCg5asv7B0xPtIaoBexJ8Tlgv6EOvOSRZ4aVL//V8IkGzy5NmFzNgU6qidXjnx1oIsX+Z7USrpPYF9B9Mn00z3tRV71KevX2zpdm0yy/smbzcKGexCkmZNrH0mUrG/wKPaSXD62/rC22Sa+xMHrlL8zyTVT8uqTZD0geoqBXpKshz95yeO8kiy/mc2G5NXrOK/2ItF5Ow+bP8nda/WTYHADo3ZlN1ebxMxVzwf6V4hDrYFIQ4ENPpJvJ7mGdwDH55VcB5FkedTqMeGDtcuckY/tJoIO/tr0yexPFyOL9cBf9Jx85Z851kdzK+Xwk/9X9DCbWdfPAZLr07KeiPPHuE7S4Uua8CPJepKTMBdJ1ido5uuxgudvSd6ePJ/C+amsTsKntq9zOrzS+UBH/5hDstVCf8w9dTYHAAdHgg66gzE7jvPywEEv0EFHdesV83YOOcnrrM6W66zI0tkqzWCWCd+MVzfnTvsmue9Vcumdl/xwaDBwJR02QILezZHsIg62WLFxWIjkpyevQZJ01jWoOJLcD0ySO5bkcNkwiSR3btcxj/3sD4Y4js9LnySr3rpi5rQXPTxsJJsfcoqaSf2kGqgvtc1GL2w57K5RqZc1yCK2IzZ9ao7zIuvX31plvQHOnPXLYWAZ528aKi7J++EnWTcmeZd7/tlq/fLEeqJ90kAH3euMPvHET1te4aeTpbY6a1k0ec1mLgdhX0mE1/zsIg65xZnoV/SfdP1KMTqpRj0smGStqTe7sDsDaYYfIUdNSa6+ySX1tXbn6Pr8k/VzAIMWBT1I8ivk7czcxtzY6WeX+qfdOQzfQZPXpuojk9yf3HkQNgs99OsslXxFXpEPeWaTQ6+kPyEXYs3Vp/CjOdXZxRlUF9en6GNG9ozRS2sr+en6gl7E9GKf5/axDtHTdhrr6TzOy4IWlgg66GJnysptDZ+45hP5bFIO5JHtQbL18mTDq+qJ+ZoUZ3udkbWr25Neyev7E7PYuEMBvYiZ03xmSnL/1FGfiVmRXA8nXdyaMEsROz6v5JrFOvZcrFnEzDLhm8itLY9eSS8zz1rJa15z3T8H2IdmP2FT099N80+a85Vv3qTmtIbU14Cf57YetiQ1l82wQRubJFkPtR7Qvz3ZSVa9mtYf52U9cbkTPvCR0BP2AXrjpF6FLY5dZ0Nswmedohed/0d8ldPeaquT678F9CDmYSR5O0SNJ0mOeSVZf+7W1CKYulqbmDW7bo4+uZ5mn8zKXWfDpxj0iTq97Mk61jZD53LTsNtmliffPLOPfhO9IY9E4+rMQ/KbIcl68PS2btchJ2IwixnJGa/OL2/SGLn7k2t9s5gZ6+8DdGgD9zANjsboYJNyixo+iBc22OTMV1ObFC/yDefgSAMnIdYfn/ggXthgq9dL38LmF5enmRvhoEg2vxy56vwMxL8f2GcVaw4JdYUNeWpBB/+eV5/ZxGrT+WA2kg9TZ3+FPOhZ5FZfPwn0pDgIhyAZkiZ8xTBofPrp9e9SDPXTrYkk9xvHPMVc1cnddvOS3J8s8elLcrisZdPzJvBh+uRMGrNffZKsOZNLWquYr/Ad41KPJKv+GFeS+3uN5PU9wjwnc9bWp/DvzLwk62yOz8tczqis7wEM7XXideMbKjr4MXWFbSK2Ixe7/8mWp19pDtsaJcnn+Me9mSRLl5O8dHbryfa0Ftj8qK4GbIiBD/TClqNXcW50OeI7/LNGvp8vOGvQQYdeZdbRizidhDrozS67PXPU3/+fQZ6oJOvpNDDaRCIbNpdcB84u/HQSdNBB30mu9Y7zsn6fZJ9AnzxMnQ2+CR/4+vTrRSfP9mtf9uFAHDb8kAj7ocgrZk6y6pPr06mneQsb+/p8cpJXfXLpzuT4vJLrPJMsj5h1zWBe94E+EceeK1+eGMSRZH1gkqw1zIb1PYDB4cBIh0kvfBN+xeT0q2Pzg/6EvIkcXyfBz1ZvjQkfxIsa+HqtdsLfr+HN188J9FDYcKNI/Setm32nLi6fnP4nXQ6aTwcbdKgl+dC5+OhmJdmFLbf2V1IOGn/7K2GemCTrSXFIXWgW0PlhUXLCJ8cClfTJ9FdXp0+S9WnzFPfJrzSfG1eSa1Z1x+eVXD6mnta1Br3IT3L/RYn65cENKOrBj+bqn1xrJZfUtzSPrI9Mcn+9tx/7LGx7S7K+2W0tCfVIrvWO85p2ktNz/WNe/rKc52/6W+vtPL0yvAJB36m/RRqAXdhPdMGnmFr+mWNtfvAnWQ9jckmHww+18sivEJ/zszHXYasnQYc1JtbmR/10iCVZN5Zd5NH1tWZhFz4zgl4/yS5syCuNVfJXr1SzY6ay/kbQ8XnNJybJobBNW1Bp05Mk65Nr05Cnfg7CB35yJ3k9+T51XuE+iXRU92koZj7Oi8Sprl9J1g3pWmYqnbt255Br3kp7B1tO89Ufn1fnILnEivzWJddDnLz2qGa+VdhoH7Vduz2nTF49k3e9eXoVvTHXXD8IqtMhw0HPJHp5ylXT+JRy3RRy+p/05uhlfTff13XUro+Uh/aiy5vwlfrZrSHZsI8d7RAAABAASURBVL5Z+eiV9MKnj/XLtOnQD+rU0DFjbIiDLl7Y/LNHY1M2Ty4d4lPSwW9uOtSsPwb2KfPEenJIeALB53AmituEblDQC9vTp276+PlAl5O8P8Fi7d8cPiRZbxuzmR3mPc5LLuSRT4hhxmp3zifZeUiH2Rw2auur38453vrlPGFme6AnWbHkkowka5/66FnYx3klWXH1x7iS6y0jrzTMlm9d53b/IKgOTq9Brz7QUV1c7hNiECPVgV7Y/gjWfmyIq3MoSF4HwRaDvDJtPdCYmiLvR6iRK4deqR/4Gicd4E6S9f3KHlerXxGfuj58qJ9UB35yIg4+EvRS2+yon+7c2XL0Xj8H+Kmnt0/PHFbxRAzTZxFM39viHx/3E5ykyzzK5Ionl+yngfRUI8ndzyw/Ys4kj23WzkfCoZFiciC/TDu51q8vyXoo5CaXnrw+nWaHNwd5fF7N/zTvHrOvmD2X5OrPn1y6fHPrN/1qrOm+r58D1ODY8aoDPyl3pzFxsDHz2F8hT0xtYU/qrxSrTtYmdxrnp4M+MYObQEKMBD/o/BM+fOXr9zAzTu8MJHZfbTHUJjF99B05T5gVYuT6EtAnxdNC98Qk11OUxMOz/lxKcRBQrEkxwPwGg1+Op01+4asupicJfvGvEJdnPpg1yfqE6AM5e71ZJmatPXPV6k9OZo469fZKFjZqT6leX/MlId5mTt59ctXsM9QWL6vZ52/1kZ+u+74lWX8qco8n9wPgMCHolddXH700RroBSLJeu3xoD7o6csJX6mfP9fj1+aq/WJELPQobckjQS+0p6Tv61ad2zlO7vuQ6B/ZEXmmv9iXBTz4xz6Vx+ZOn/nLlkIWN5pPrS4Cnej5x1T1JOD6vJOtm26BiaAiDFjbkJd/X1J9kfRKS9xy10F8uCbp5fBJImBX047ySfPek9wBIM5L6F72nzob1Crs56n0zBf0mYqX5avU5Pq/OyqQXdpJ1xmpmPRt8pH7J6/yOz6t+ZnLF6V3D2Tmvsh4ArysPAVm8znz9IvkaZ9M1alNSQz4SctTJJ9mggw66HGvR+Yp+7V2fHPkTteBrHtk5SOgHPcnm0MHWf8KH1qudqHPASYj1yt3j6os5YdandeqzHlr3lWz+3u/JLwftJed8YD7WJybJ/Wm0E5voAGRRrJD8KSwmFzOXjf+fnu3j4KEH3+xXHz8dza1euzn2W58c6PlEa8iiFrNOzBmQ/CTocifWh7NPst4CyfUnhpk3dX2gJ+iQQ/KBzod9jfU9wPkUrIfA6wVeMcn1QDTGN+GfPMWSawPJtaHmN5dNJ5P39eoj5Uz4kqyZ+ZOsA6ObH17DXs3kxGsbjZFojlp9ukYP7DivJPc6cppLgk9dZZI1Ix/4m0fumIGPhLkKP/Q5Pi/9wIckaz46ksuWo/aJ9d8CPBmYmz3OK8ndUBNoYrjCxm7zyTcIyQa97Hb9pJieDoBkQ7/kNRd7MmvVQd3u5xODNcTbRwx8RR7keoAgh29KOvgLu/DRu1aSw5Xk7Q2cZJ299ffc4/PiFwc9uXrU5pskWZXuc1n/LsBrCk+vO76+RvZXSR8azejiqF0pVsRnP7YYCbq6CR/EsdfXVz8J/tZNu759b81RB3nmWKf2+VuSdaPE0Dz6EzNO7xpkMYfzBx100CG39dXZhQ9mmL7WioGN6us/BtnkLGwDiZCM+kk2GudDffxlbqS+yqf8nxtTO9dkoz57mriHSYj1zRrF3ovarl3JN9G7Pelgk2iuejpZapN7rpz6xcBG+8uBbyLRcyULvxzwsaEPutfKt+8BvDpKXx21yd1Xe5dJ1qekB0yWJFVXTpIl9WgguXxJ7q+hycsnF3Om2nzwqi1euXRSjKxNR/2kXknWK5heX3X55alPctUm7zPro04fsEkc55VkrTn9Yqjv+LzcQA8GCbqHhkR91ZXpU2kO3P9j0ck1rCSLweZ8zSMlk/x0/onYz0G9NaBPUasfWdhf0brK1kxbLT+f9ZJrj8m7nIciv6if8Ou1Uz85832f4D988YlNnIM+fGRyzcRvViSXj84vTz7o/CV55Yo9IdeDAXtOcqzvAbwu4BXRp0gSPEFFjA/10cv0HeeVZD3Rx+c186oL0dWStel8hY2nOH+Rb04SdPsCHfTulwSfmBq9rFPY/KW58qvLgRwSyXVTkutPQ2Ktqc6myyfZMFNhi8npTFO6scm1Fn3iwWHL10NPXxpIs98/COIAJ9lFST7QNSlssEk5ap+w6E/F1T3lTB+9zPyuT5pnHhZ9+ujy2odkFzbYX+WKozldgz39T/XiZp/UR0LM1244OzbohS23a9LBj6mzoVZPuvj5cFz/QtwGkqxPrKfGK8SrC33lkLstjx/qzobra/pxXno6ABL0CR/O1LVuEuojSVaO/tZJLjvJWi/J+n6h85jTK5g0W2mcTcfU9QZfa+XwkdPH5gd90noz0It6efaRvGY/Pq+eR5LlYYNBwhm6eXi6+XxySNDVgc5HT3Lc3wQaaA5pUDxtgN8m5sZb+yTllqe4fqVx+fqDXr+86mRjlfJLkvvhsL/SuJqy97Vv8MNaZH3s9iH14SvNlc/XOH9tvifEJ3KsUR8btcWQXPuli2PumS3Gd5wXef8gyBNRPCGeFND7pLHlkPU3xuYXP3t/efAWNQToSaS/kWTVc7anvpjrsOUUMfT1Zrapsydy9Z/sPmvwQR6bZGPqszc/5PCThV+fzj31JMtd3zLO35LLn+Rwbm6mB6CSDnbPVh6SrPOk4zgv/fHdN4EdtkOS5axbjUi+bkgNHPaETw75U8w6unzy5yAXcklrms8GJ3xovJLvR8jDzGGj61XyNc/ataeUa1bs+rTFJ42R+j1h7frlTfRik+X+QZCbmmQ9XX2Cksv2VKF+kj3hQ3J9x2vzHYaEwUixJMe8kqyHK3nVy5v5SdZ8nuKSXHVs62PO1U8Fn9iOuiJn5rPlkxO+1lTyNUcPr/raYpBLgp5cez3Oyz5hz5MztH5oJVacoxv5xIzR1ZCoPvu//a1gQ5UmGaA+On+S+xsum+yGbdrXPJJPrLCLHDSPROO7nDF6mXn1db3kejCSd2n+47y6p+SKs3tjSLQXyZaTvOfXL0ZvLp0P9Ikc85q/kq859CKneqU8fZOsD0RyzcQ/c6rPHnR03fWDoOO8+nSQ8MT0NdEnrTZZnzz5PVgyyRpsH8CAFue3geOLK3ltSP5TrnXQFnRzmMdsZvRHHpIN+vTJR2PidOgjhtqkerLxriuPTwx7L7EiV11nT7LOyz6Tl/5k8znHifN0Tjt7Tm09js9r/RzAwDbmz4egwz+sBN2GQAe9G1K/05jN0hun89Wu1G/qteXXT7JBL+y9p/rSPLb9dU/2UfjFm9ue+tL5xZvPBh/o8gob7CnVy6+kT+ROuzp/0dNcxcNUXWzSminbk7wfAEWSyNmsPot4aEhPUJ+mSk8h2OJySSTX17ok60lPcriSrK/7zeHTv5IONpK8femxljX75NP5SpK1nv7HeemF7o8ONplk5bee1FN/kp1cMx/jSrLqrCMHaqAOYsVaE+v3nOf587N35E7cyGlXn3V8T/b6OYABO7SvDbU7sFh91XebH/yweT8H939W8KOv99aTW0kHG/SiL2qTcmZ/PjkwT/fA3pFb5EIOqY4szau0bnWydfLpfM1hT+Ts/dkQQ/P1AR/klOR6GJPrARR/ovl66gW63PXPwym34+P6K2ItIpNroePz6pPUJ9TTBX4+T7c6JFmfjuTVI7l0eTg+r+TyJ5dUjySfGcf6J93WgPVaT9ZHQhxid4NPJcl6+ySX5JY769j2VcT2XslVzy/eGnIiVqyVXHX2B+c/cU/ANyW9uJE7Hjo1kEdCHhu1yfUvgwzaTVZOn1cMxMgn9q9pcvUA/Svaa8b52FPSwV96oPPw9/XUFHXVK+vr/JXielmDBF/zq7MLH9jq9rnaQw7kgb+wCx+dhJ5Fbw9SYaPx5pOT2Y//fgAYk5nYpqRFLJpcT3AS5vo0UZIsPfleiqM96MmVxzfpWqQ8JFeuT4wneeJpRn1ykqy3z3FeeutVOfdKt1+In+lrD3rot/flT65Zkqw1+NB8NfDJI/nFkeRwmQfWJ0HfMZcHBlNnPyEHjdH3nl1rfQkwoEFBB93rpLBRm2TLtTnQC/sJB1C/erSGZBd2qa+SXx/9QAd/MWNpHSkut6hPsm6kGMSSrAeBzqdXv9+gtxfJD7pcNfqCXsTVyiVrV29tpfrkmi3J4UqyZm0syZqTvXOcF59+sB6sh/UA1EFKMiyJ6ePXLLm+q/dpwbnGGiAJ9cZT1vjtPBW+5Mqln663+iRrg9aDNY/PK8n6PqBPtKe7T3p9c93ZX5+SZK1ZuzK5/Hq0nzXofMkVN057VxcvnUktWi8u33r2hnnOdPDLSbL+5OM+wE0j5YBe2IWPPvP1BH9Zfwycw9FhaMOitk3xk4Vd6iN9LZ3wgY+cTF97TSmXXUkHWy3oqH9KemkO277QPYpN/GxAb7n8JNSQO/xFfpFXXT86X2nNk5RjPnjgcGwX30Qupu+r3t/910CFsEaS9Uk8Pq8kn9r3Yi5G74I2QNdzRx50I8XlTvgh1jwyyZrNp2SSXP7jvJJr3ta3r5ncBEydjeaRXTe5ep1t7zdHklvfZ0gidcWTrFmPn3FZz7qltjkn4mzzkqV2ZfPE6fpN7p8DeFVMfI3yZ3j/O3r+PC/mtYLqZOHva8VrBknWxns4fHLkqiPLtOWgsUo+1CZbN/10a4G+Y57kukHH55VkzaoGckCHHiTosP5EbEeP5jjT0rnJ+ir5UFu99dq7evLag3VKkrcHTz72er71PYCAYg7Q+UA/Pq/kasxMQtwkWYvKVwd6kvU1TN/6KpOsQ5eH+knwTZIcLp9oeJJJ0EFH88gk362jv5nggAtbDMd56XmK9V/kZl96kbN/uhqbtUnWWeidZJ1XkjWbdSEGOszlYSALG7WfpHjRR084z+Rak76+B/B66Cujkq/woTbJRr+m0esnHQjooIM+aR3f1NngK082H5pDsgsbbOuXeYOOz6s3sjlq1P4UzgDyZg0d/EVvPtRHr78+kq+YrTzNvvtqk61rL+u1//1zgCYpmDibJMT6FFDEyR1+fboQabFKeuOkfNAn8idi8pDk/uQkL309zedPMZOXz3xqoZ/1n3AYZcbVqMWP1k5iqTUXJblsNeyS5M6pj5QHOujW7CydjeTzsKE2+SPUiJOwL9Dv7wG8RrwinvAKEe8rxdcmNuoj2RN1EzF2Jb1Yl38ixk/yWwN0PoiDjhmrzQe2XHhgyOR1U5Ks1zG/fGvZKzkR2xHnq5xr0YscsCvpT5jRw3CcV5I1W3LNW3/lcV70ndO9fullX12na9/fAyRXY4lILjvJauC3JG9DHNuVZH2NUw+L7QfCZxDxJKsfvX6xwmdQtpwk6xOU5OjVDfvEVBebepK1TvuZyTe28+bWth6aS7dvKQGRAAAEu0lEQVR+cq3ZvuTxeSVXjDn97JK8cviSy05y7ym5dHst1oZ5ipk6eyWfuFzQoQ854+yyvgR4FcxXRG0+sAu78FUna5PwmnFjyNrVZ351OUVe4Zs51Ul4HYKO6iTUt5d53AA83Sw+uWrk0vWEXv3ZALvwV5+SH3pNf20Se4wP1jYDzDUxfxLiO5LcD5Ua9RO9of/9TaBBIQBBtFAjNuoj+Un+yexRvVKemkl9U+r9U7THnqcPxElrP9HDF5NX1O09azenUi3YctTWpvOTP0JOUdu53BN6JR0zh12aN+N8kEMW9v1XwjxGhie9NpBcT5JXSklyv077GhGjkxM92HuM/YTXVPGaLvWp0a+wi9zqjavjJ/eY2ZJrf8m1J3XNUwe1RTzJ0SvJ+qQ5N/DrC7loP5ItBnp9lUm0WOcrh6Ev6E+I4UcPlxsNOXL7oOm3vgk0DJKsDdE7QHL5kkvyJy+dXdTZzM70z9ypt0Yupi0vudZMnqWNJVmHpx6zBxv1kb2xbjR8PeUTg/y59nFeDhGnutZq3Pp8SZY/ueY8zksOkpzWsc6YDWskOQp7Yg6Yq7DBNvcT4vpYA/qToIvh+ndhx/UXLWzC5uAp6WuEnHiFeKL4dqluImfaT7qcJ+Tufuth+tmdiY4Z16fYG+x1ch7B+mNu88jZY+rtL0cvkg/y2CQb9NI5azdeqVZPs5kJvWl0N6/Uz3Yz3XTws0FHdbnQH/c/DDHY/g3O9BnYkM0RY/PTJ/yojy7vK2y62Hx1+XQ+0Our/MrHX2Yun16gzxhfcThgN09u99S/WGpv4O/ZsOWShY3Ziw7+HzF70NWAXp7q5TyhxrxYfwpoUpvYdDfPJ872BJKNs8EnZ/r52PxyPHWeQq8t0D2tdLJPKR3ifKA/+cQmcooaMevWZy2vedB3//4qFddj9tKv++rZ2CMdYt2v2qIH9CTrr5w+a8wetZ0p/+TJZwYzYers4iHA+iawQ1QaBl3YgmJ8ZGEXPvm1bbQ+0oFjHrKcwk9XLx9sNdPH33XExYpY9cbIopd1Chu15ekBa5Czn1w54BdH9a9qZl3z+SZ6mqM+OjysfkZBF5M34SvNIcEvlyy1O/M5z/WXQIfD/V7fqFD6BPVJI/lIyCEL20EUNsTVlT6J/dTw87HJnforG29d7SlnbK97ypMDn4zClquXPdiLvZ0Ht77Z26UY5KmZ6PMVzVNX9NGffOIpxgf3sze7N7+++uXdfx+gg9nwxEH4WgG6mK91qI+fXtjyJruv61U2tzbZQ6FDTiW98JXpq0427iZCbz6S7dDpE3G1MP8TYmrkijsDElNnyy3y6STokAe6vphxemleZf1q67M3zJg4+O4fBHEUxR2edLPBX/jlawJ6Y2wY3sFiPsGePE8jPJ3kDj88rYVdZr44P8lfSUfX4/dqhPwybfnyQEdnd5D2ZG9zv/Y9bXF58vGj/etvPmuQ4OtsnYNfTtET7U+fsfrrY5sLZiVx/7eAfSENoRDdEF8xlGFLbb26AYcLNr/cmcfm3+GfiOuhl6+LJJt/Z9bRG6c7EOuDTT75+EvrK9W1hi6PDTrkmg90yIU46JXyilzY49xr419JNY2p870D9OEXtyYJvv8HAAD//1lXQkcAAAAGSURBVAMA5mEPf0tBpP8AAAAASUVORK5CYII=");
+}
+
+/* ── 質感模式（三種，由 root 上的 class 決定 --texImage 指向哪裡）──
+   .tex-plain  純色：不畫貼圖層，只留漸層污漬
+   .tex-local  完全本地：用上面內嵌的 data URI，離線也不會掉
+   .tex-remote 外部貼圖：用 --texRemote 指定的網址，換紙紋只要換網址
+   外部模式若圖載不到，瀏覽器只是不畫這層，底下的 --paper 純色仍在，
+   所以最差情況等同「純色」，不會破版。
+   （注意：var() 的 fallback 只在「變數沒定義」時生效，
+     不會在「圖載入失敗」時退回內建圖 —— CSS 沒有那種機制。） */
+.rpg-v7-root.tex-plain  { --texImage: none; }
+.rpg-v7-root.tex-local  { --texImage: var(--texLocal); }
+.rpg-v7-root.tex-remote { --texImage: var(--texRemote); }
+
+/* 大範圍污漬與暗角（貼圖之上再疊一層，讓紙看起來有使用痕跡） */
+.pageWrap::after {
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background:
+        radial-gradient(ellipse at 15% 10%, var(--grain), transparent 45%),
+        radial-gradient(ellipse at 85% 85%, var(--grain-2), transparent 45%),
+        radial-gradient(ellipse at 50% 50%, transparent 55%, var(--vignette));
+}
+
+.stage {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 22px 20px 20px;
+    position: relative;
+    z-index: 2;
+    -webkit-overflow-scrolling: touch;
+}
+/* 行寬與面板、控制列共用同一上限，確保三者左右對齊。 */
+.text-display,
+#state-viewer-panel {
+    max-width: var(--contentMax);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* 寬螢幕不分欄。行寬由 --contentMax 決定，使用者可在「顯示設定」裡調。
+   （分欄會讓眼睛走完左欄再回到右欄頂端，串流生成時還會不斷跳版，
+     而且與分頁模式的翻頁邏輯天生衝突。） */
+/* 捲軸做成黃銅色細條 */
+.stage::-webkit-scrollbar { width: 7px; }
+.stage::-webkit-scrollbar-track { background: rgba(120,95,55,.1); }
+.stage::-webkit-scrollbar-thumb {
+    background: var(--brass-dim);
+    border-radius: 4px;
+    opacity: .6;
+}
+
+/* ── 本文排版 ── */
+.text-display { color: var(--ink); }
+.text-display p {
+    line-height: 1.95;
+    letter-spacing: .015em;
+    margin-bottom: 1.15em;
+    text-align: justify;
+}
+.text-display p:last-child { margin-bottom: 0; }
+
+/* 對話段落（由 hooks.onAfterRender 補 .dialogue class） */
+.text-display p.dialogue {
+    padding: .7em 1em;
+    background: var(--dlg-bg);
+    border-left: 2px solid var(--dlg-border);
+    border-radius: 0 3px 3px 0;
+    line-height: 1.9;
+    transition: background .45s ease, border-color .45s ease;
+}
+
+/* 首字下沉 —— 概念圖最顯眼的特徵 */
+.text-display.show-drop-cap > p:first-of-type::first-letter {
+    font-family: var(--display);
+    font-size: 3.1em;
+    float: left;
+    line-height: .88;
+    padding: .06em .12em 0 0;
+    color: var(--ink-strong);
+    font-weight: 700;
+}
+/* 對話段落不做下沉（引號下沉不好看） */
+.text-display.show-drop-cap > p.dialogue:first-of-type::first-letter {
+    font-size: inherit; float: none; padding: 0;
+    color: inherit; font-weight: inherit; font-family: inherit;
+}
+
+/* rpg-core formatText 產生的高亮 */
+.highlight-dialogue { color: var(--q); }
+.highlight-emphasis { color: var(--emph); font-style: italic; }
+.placeholder-text {
+    opacity: .45;
+    letter-spacing: .1em;
+    font-family: var(--sans);
+    font-size: .9rem;
+    text-align: center;
+}
+
+/* 章節分隔線 —— 概念圖的「◆ Chapter 1 ◆」 */
+.chapterMark {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 1.6em 0 1.3em;
+    color: var(--ink-strong);
+    font-family: var(--display);
+    font-size: 1.15em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.chapterMark::before,
+.chapterMark::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--brass-dim), transparent);
+    opacity: .55;
+}
+
+/* 生成中：頁面邊緣呼吸提示 */
+.rpg-v7-root.generating .pageWrap {
+    animation: pageBreathe 1.4s ease-in-out infinite;
+}
+@keyframes pageBreathe {
+    50% { box-shadow: inset 0 0 20px var(--brass-glow); }
+}
+
+/* 變量更新狀態面板（rpg-core updateStateViewer 會寫進來） */
+#state-viewer-panel {
+    margin-top: 16px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: rgba(120,95,55,.05);
+}
+#state-viewer-panel .svTitle {
+    font-family: var(--sans);
+    font-size: 10.5px;
+    letter-spacing: .22em;
+    color: var(--emph);
+    padding: 7px 10px 0;
+}
+#state-viewer-body {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.65;
+    color: var(--ink-dim);
+    padding: 5px 10px 9px;
+    margin: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ==========================================================================
+   [3] 四個頁籤
+   概念圖：隊伍(TEAM) / 行動(ACTIONS) / 收容(STORAGE) / 筆記(NOTES)
+   選中的頁籤與紙張同色，看起來像從本文區「長出來」的書籤
+   ========================================================================== */
+.tabRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 0 2px;
+    margin-top: -1px;
+}
+/* 每個頁籤的基準寬 52px。中文標籤只要 28px，真正撐寬的是底下的英文小標
+   （ACTIONS/STORAGE 展開約 40px），所以英文在窄螢幕下改為隱藏（見下方 @media），
+   讓 5 個頁籤在直立手機（390px，實際可用 320px）排得下同一行 ——
+   4+1 的折行會讓最後一個獨佔整行被拉到三倍寬，比稍微擠一點更難看。
+   真的窄到排不下才折行，而且不必隨頁籤數量改 CSS。
+   用 flex 而非 grid：repeat(N, 1fr) 會硬擠成一行，愈窄愈扁，永遠不折行。
+
+   頁籤移到面板下方後，書籤的方向不用改：
+   它原本接的是上方的本文區，現在接的是上方的狀態面板，
+   兩種情況都是「從上面長出來、往下垂」，所以維持無頂邊 + 下緣圓角。 */
+.tabRow button {
+    flex: 1 1 52px;
+    min-width: 52px;
+    white-space: nowrap;
+    font-family: var(--serif);
+    background: linear-gradient(180deg, var(--tab-hi), var(--tab-lo));
+    border: 1px solid var(--brass-dim);
+    border-top: none;
+    border-radius: 0 0 7px 7px;
+    padding: 6px 4px 7px;
+    color: var(--tab-fg);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    transition: background .25s, color .25s, transform .15s, border-color .45s ease;
+}
+.tabRow button:hover:not(.active) {
+    background: linear-gradient(180deg, var(--tab-hover-hi), var(--tab-hover-lo));
+}
+.tabRow button .cn {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    line-height: 1.2;
+}
+.tabRow button .en {
+    font-family: var(--sans);
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    opacity: .65;
+    line-height: 1.2;
+}
+/* 選中的頁籤跟它相接的面板同色（--panel-lo 是面板漸層的底端），
+   看起來像同一片紙延伸下來。往上位移 1px 蓋掉接縫。 */
+.tabRow button.active {
+    background: var(--panel-lo);
+    color: var(--ink-strong);
+    border-color: var(--brass);
+    transform: translateY(-1px);
+}
+.tabRow button.active .en { opacity: .55; }
+
+/* ==========================================================================
+   [4] 狀態欄 —— 可收合的滑出面板（沿用 reader_8_2 的行為）
+   平時收起，把閱讀空間讓給本文；點底部的狀態條才展開。
+   左：大立繪（2:3 直式）+ 縮圖切換帶
+   右：名牌 + 狀態條 + chip + 描述
+   ========================================================================== */
+
+/* 收合／展開：用 grid-template-rows 動畫，能自動吃內容高度 */
+.sheetZone {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows .34s cubic-bezier(.32,.72,.28,1);
+    flex-shrink: 0;
+}
+.rpg-v7-root.sheet-open .sheetZone { grid-template-rows: 1fr; }
+
+.sheetClip {
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* 展開時才顯示的間距，收合時完全不佔位 */
+.sheetInner {
+    padding-top: 8px;
+    max-width: var(--contentMax);
+    margin: 0 auto;
+}
+
+.panelArea {
+    background: linear-gradient(180deg, var(--panel-hi), var(--panel-lo));
+    border: 1px solid var(--brass-dim);
+    border-radius: 8px;
+    padding: 10px;
+    transition: background .45s ease, border-color .45s ease;
+    max-height: min(56vh, 460px);
+    overflow-y: auto;
+}
+.panelArea::-webkit-scrollbar { width: 6px; }
+.panelArea::-webkit-scrollbar-thumb { background: var(--brass-dim); border-radius: 3px; }
+
+/* 頁籤內容：一次只顯示一個 */
+.tabPanel { display: none; }
+.tabPanel.active { display: block; }
+
+/* ── 左右分欄 ── */
+.charWrap { display: flex; gap: 14px; }
+
+/* 立繪欄：依直式立繪比例定寬，窄屏自動縮 */
+.portraitCol {
+    flex: 0 0 auto;
+    width: clamp(112px, 34%, 168px);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+/* 縮圖切換帶 */
+.queueWrap { display: flex; align-items: center; gap: 3px; }
+.qArrow {
+    flex: 0 0 auto;
+    width: 20px; height: 46px;
+    border: none; border-radius: 3px;
+    background: transparent;
+    color: var(--brass);
+    font-size: 11px;
+    cursor: pointer;
+    display: grid; place-items: center;
+    transition: background .25s;
+}
+.qArrow:hover { background: var(--brass-glow); }
+.qArrow:disabled { opacity: .25; cursor: not-allowed; }
+.queueView {
+    flex: 1 1 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;
+}
+.queueView::-webkit-scrollbar { display: none; }
+.queueStrip {
+    display: flex; gap: 5px;
+    width: max-content;
+    padding: 2px 0;
+}
+.thumb {
+    flex: 0 0 auto;
+    width: 34px; height: 44px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    padding: 0;
+    cursor: pointer;
+    overflow: hidden;
+    background: linear-gradient(160deg, var(--portrait-hi), var(--portrait-lo));
+    display: grid; place-items: center;
+    opacity: .45;
+    transform: scale(.94);
+    transition: opacity .3s, transform .3s, border-color .3s;
+}
+.thumb img {
+    width: 100%; height: 100%;
+    object-fit: cover; object-position: top center;
+    display: block;
+}
+.thumb .initial {
+    font-family: var(--display);
+    font-size: 13px;
+    color: var(--brass);
+}
+.thumb.active {
+    opacity: 1;
+    transform: none;
+    border-color: var(--brass);
+    box-shadow: 0 0 0 1px var(--brass-glow);
+}
+
+/* 大立繪 */
+.portrait {
+    position: relative;
+    aspect-ratio: 2 / 3;
+    border-radius: 4px;
+    border: 1px solid var(--brass-dim);
+    overflow: hidden;
+    background: linear-gradient(160deg, var(--portrait-hi), var(--portrait-lo));
+    display: grid; place-items: center;
+    transition: border-color .45s ease, background .45s ease;
+}
+.portrait img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: contain; object-position: bottom center;
+    display: block;
+}
+.portrait .initial {
+    font-family: var(--display);
+    font-size: 46px;
+    color: var(--brass);
+    opacity: .55;
+}
+
+/* ── 右側資訊欄 ── */
+.infoCol {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.nameplate {
+    padding: 8px 11px;
+    border-radius: 4px;
+    background: linear-gradient(170deg, var(--card-hi), var(--card-lo));
+    border: 1px solid var(--line-soft);
+    transition: background .45s ease, border-color .45s ease;
+}
+.charRoma {
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: .34em;
+    color: var(--card-fg-dim);
+    margin-bottom: 3px;
+    transition: color .45s ease;
+}
+.charName {
+    font-family: var(--serif);
+    font-size: 1.08rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    color: var(--card-fg);
+    line-height: 1.3;
+    transition: color .45s ease;
+}
+.charTitle {
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: .2em;
+    margin-top: 3px;
+    color: var(--brass);
+}
+
+/* 數值 chip —— reader_8_2 的 .chip 設計 */
+.chipRow { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border-radius: 4px;
+    background: linear-gradient(170deg, var(--card-hi), var(--card-lo));
+    border: 1px solid var(--line-soft);
+    transition: background .45s ease, border-color .45s ease;
+    min-width: 0;
+}
+.chip .lb {
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: .2em;
+    color: var(--card-fg-dim);
+    white-space: nowrap;
+    transition: color .45s ease;
+}
+.chip .vl {
+    font-family: var(--serif);
+    font-size: 12px;
+    letter-spacing: .04em;
+    color: var(--card-fg);
+    white-space: nowrap;
+    transition: color .45s ease;
+}
+.chip.rank .vl { color: var(--brass); }
+.chip.tags .vl { color: var(--q); }
+
+/* 三條狀態條（在資訊欄裡，帶數值標示） */
+.statBars {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px 11px;
+    border-radius: 4px;
+    background: linear-gradient(170deg, var(--card-hi), var(--card-lo));
+    border: 1px solid var(--line-soft);
+    transition: background .45s ease, border-color .45s ease;
+}
+.statBar { display: flex; align-items: center; gap: 6px; }
+.statBar .lb {
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: .12em;
+    color: var(--card-fg-dim);
+    width: 34px;
+    flex-shrink: 0;
+    transition: color .45s ease;
+}
+.statBar .track {
+    flex: 1;
+    height: 6px;
+    background: var(--track-bg);
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.35);
+    transition: background .45s ease;
+}
+.statBar .fill {
+    display: block;          /* span 預設 inline 會忽略 width/height */
+    height: 100%;
+    border-radius: 3px;
+    transition: width .45s ease;
+}
+.statBar .num {
+    font-family: var(--sans);
+    font-size: 9.5px;
+    color: var(--card-fg-dim);
+    width: 26px;
+    text-align: right;
+    flex-shrink: 0;
+    transition: color .45s ease;
+}
+.statBar.a .fill { background: linear-gradient(90deg, var(--stat-a), #e05a5a); }
+.statBar.b .fill { background: linear-gradient(90deg, var(--stat-b), #5a8fe0); }
+.statBar.c .fill { background: linear-gradient(90deg, var(--stat-c), #62c088); }
+
+/* 角色描述 */
+.charDesc {
+    font-family: var(--serif);
+    font-size: .86rem;
+    line-height: 1.85;
+    letter-spacing: .02em;
+    padding: 9px 11px;
+    border-radius: 4px;
+    background: linear-gradient(170deg, var(--card-hi), var(--card-lo));
+    border: 1px solid var(--line-soft);
+    color: var(--card-fg);
+    transition: background .45s ease, border-color .45s ease, color .45s ease;
+}
+
+/* ── 其他三個頁籤的佔位內容 ── */
+.slotGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 6px;
+}
+.slot {
+    aspect-ratio: 1;
+    background: var(--ctrl-bg);
+    border: 1px dashed var(--line);
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
+    color: var(--brass-dim);
+    font-size: 16px;
+    opacity: .6;
+    transition: background .45s ease;
+}
+.emptyNote {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--card-fg-dim);
+    opacity: .75;
+    text-align: center;
+    padding: 18px 10px;
+    line-height: 1.7;
+    transition: color .45s ease;
+}
+.actionList {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.actionList button {
+    font-family: var(--serif);
+    font-size: 12.5px;
+    text-align: left;
+    background: linear-gradient(170deg, var(--card-hi), var(--card-lo));
+    border: 1px solid var(--line-soft);
+    border-radius: 5px;
+    padding: 8px 11px;
+    color: var(--card-fg);
+    cursor: pointer;
+    transition: background .2s, border-color .2s, color .45s ease;
+}
+.actionList button:hover {
+    background: var(--brass-glow);
+    border-color: var(--brass);
+}
+
+/* ==========================================================================
+   顯示設定分頁（沿用 reader_8_2 #viewSettings 的樣式語彙）
+   小標 → 一排互斥選項按鈕 → 說明文字，這是那邊的基本節奏。
+   ========================================================================== */
+.setSection + .setSection { margin-top: 18px; }
+.setLabel {
+    font-family: var(--sans);
+    font-size: 11px;
+    letter-spacing: .22em;
+    color: var(--brass);
+    margin-bottom: 8px;
+    transition: color .45s ease;
+}
+/* 互斥選項：一排等寬按鈕，選中的用黃銅邊框標示 */
+.setBtnGroup { display: flex; gap: 6px; flex-wrap: wrap; }
+.setOptBtn {
+    flex: 1 1 0;
+    min-width: 84px;
+    font-family: var(--sans);
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    padding: 7px 9px;
+    color: var(--card-fg-dim);
+    cursor: pointer;
+    text-align: center;
+    transition: background .2s, border-color .2s, color .2s;
+}
+.setOptBtn:hover { border-color: var(--brass-dim); color: var(--card-fg); }
+.setOptBtn.active {
+    border-color: var(--brass);
+    background: var(--brass-glow);
+    color: var(--card-fg);
+}
+/* 說明文字：解釋這個選項的代價，讓使用者知道自己在選什麼 */
+.setHint {
+    font-family: var(--sans);
+    font-size: 10.5px;
+    line-height: 1.75;
+    color: var(--card-fg-dim);
+    opacity: .8;
+    margin-top: 7px;
+    transition: color .45s ease;
+}
+/* 滑桿：紙紋濃度、行寬這類連續數值 */
+.setSliderRow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+.setSliderRow input[type="range"] {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--brass);
+    cursor: pointer;
+}
+.setSliderVal {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px;
+    color: var(--card-fg-dim);
+    min-width: 3.2em;
+    text-align: right;
+}
+/* 外部網址輸入框：只在「外部貼圖」模式下才顯示 */
+.setUrlRow { margin-top: 8px; }
+.rpg-v7-root:not(.tex-remote) .setUrlRow { display: none; }
+.setUrlRow input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px;
+    background: var(--ctrl-bg);
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    padding: 7px 9px;
+    color: var(--card-fg);
+    transition: border-color .2s, color .45s ease;
+}
+.setUrlRow input[type="text"]:focus {
+    outline: none;
+    border-color: var(--brass);
+}
+
+/* ==========================================================================
+   [5] 底部控制列
+   一列整合：模式切換 / 分頁 / 功能鍵（主題、音樂）
+   下方是狀態條 —— 點它展開／收起狀態面板
+   ========================================================================== */
+.ctrlRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 0 2px;
+    width: 100%;
+    max-width: var(--contentMax);
+    margin: 0 auto;
+}
+.ctrlRow .pager {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+/* 全文模式時隱藏分頁（沿用 rpg-core 的 .paged-mode 慣例） */
+.rpg-v7-root:not(.paged-mode) .pager { display: none; }
+
+.ctrlRow .rowIcons {
+    display: flex;
+    gap: 5px;
+    margin-left: auto;
+}
+.ctrlRow .icon-btn {
+    min-width: 30px;
+    padding: 5px 7px;
+    font-size: 12.5px;
+}
+.music-toggle.muted { opacity: .4; text-decoration: line-through; }
+
+/* ── 狀態條：面板的開關 ── */
+.statusStrip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+    padding: 7px 14px;
+    margin: 0 auto;
+    width: 100%;
+    max-width: var(--contentMax);
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    background: var(--ctrl-bg);
+    cursor: pointer;
+    user-select: none;
+    transition: background .2s, border-color .45s ease;
+}
+.statusStrip:hover { background: var(--brass-glow); border-color: var(--brass-dim); }
+.statusStrip .chev {
+    position: absolute;
+    left: 12px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--brass);
+    transition: transform .34s ease;
+}
+.rpg-v7-root.sheet-open .statusStrip .chev { transform: translateY(-50%) rotate(180deg); }
+.statusStrip .stripLabel {
+    font-family: var(--sans);
+    font-size: 11px;
+    letter-spacing: .16em;
+    color: var(--ctrl-fg);
+    transition: color .45s ease;
+}
+
+/* 生成中：狀態條的箭頭呼吸提示 */
+.rpg-v7-root.generating .statusStrip .chev {
+    animation: chevPulse 1.2s ease-in-out infinite;
+}
+@keyframes chevPulse { 50% { opacity: .25; } }
+
+.ctrlRow button {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    background: var(--ctrl-bg);
+    border: 1px solid var(--brass-dim);
+    border-radius: 5px;
+    padding: 5px 10px;
+    color: var(--ctrl-fg);
+    cursor: pointer;
+    transition: background .2s, color .45s ease, opacity .2s, border-color .45s ease;
+    white-space: nowrap;
+}
+.ctrlRow button:hover:not(:disabled) {
+    background: var(--brass-glow);
+}
+.ctrlRow button:disabled { opacity: .3; cursor: not-allowed; }
+.ctrlRow .page-num {
+    font-family: var(--display);
+    font-size: 12px;
+    color: var(--brass);
+    letter-spacing: .1em;
+    min-width: 44px;
+    text-align: center;
+}
+
+/* ==========================================================================
+   響應式
+   ========================================================================== */
+@media (max-width: 420px) {
+    .rpg-v7-root { padding: 6px; }
+    .stage { padding: 18px 15px 16px; }
+    .text-display.show-drop-cap > p:first-of-type::first-letter { font-size: 2.8em; }
+    .partyStrip { grid-auto-columns: minmax(86px, 1fr); }
+    .tabRow button .cn { font-size: 13px; }
+    /* 窄螢幕下藏掉英文小標：中文只要 28px，但 ACTIONS/STORAGE 展開約 40px，
+       是它們在撐寬頁籤、逼出多餘的折行。中文已足夠辨識，英文屬裝飾。 */
+    .tabRow button .en { display: none; }
+    .timeText { font-size: 12.5px; }
+}
+
+@media (min-width: 700px) {
+    .stage { padding: 30px 34px 26px; }
+    .text-display p { line-height: 2.05; }
+    .partyStrip {
+        grid-auto-flow: row;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        grid-auto-columns: auto;
+    }
+}
+
+/* 尊重使用者的減少動態偏好 */
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="rpg-v7-root">
+  <div class="deviceShell">
+    <span class="corner tl"></span><span class="corner tr"></span>
+    <span class="corner bl"></span><span class="corner br"></span>
+
+    <!-- ═══ [1] 頂部時間列 ═══ -->
+    <div class="topBar">
+        <div class="pocketWatch" id="pocket-watch"></div>
+        <div class="moonPhase" id="moon-phase"></div>
+        <div class="timeText">
+            <span id="hud-place">—</span><span class="sep">|</span><span class="dim" id="hud-sky">—</span>
+        </div>
+    </div>
+
+    <!-- ═══ [2] 本文區 ═══ -->
+    <div class="pageWrap">
+        <div class="stage">
+            <div class="text-display show-drop-cap">
+                <p class="placeholder-text">尚無內容</p>
+            </div>
+            <div id="state-viewer-panel" style="display:none">
+                <div class="svTitle">變量更新</div>
+                <pre id="state-viewer-body"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ [3][4] 可收合的狀態面板 ═══
+         平時收起，把空間讓給本文；點下方狀態條才展開。 -->
+    <div class="sheetZone">
+      <div class="sheetClip">
+        <div class="sheetInner">
+
+          <div class="panelArea">
+            <div class="tabPanel active" data-panel="team">
+                <div class="charWrap">
+                    <div class="portraitCol">
+                        <div class="queueWrap">
+                            <button class="qArrow" id="char-prev">◀</button>
+                            <div class="queueView"><div class="queueStrip" id="queue-strip"></div></div>
+                            <button class="qArrow" id="char-next">▶</button>
+                        </div>
+                        <div class="portrait" id="portrait-box"></div>
+                    </div>
+                    <div class="infoCol">
+                        <div class="nameplate">
+                            <div class="charRoma" id="char-roma"></div>
+                            <div class="charName" id="char-name">—</div>
+                            <div class="charTitle" id="char-title"></div>
+                        </div>
+                        <div class="statBars" id="stat-bars"></div>
+                        <div class="chipRow" id="chip-row"></div>
+                        <div class="charDesc" id="char-desc"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="tabPanel" data-panel="actions">
+                <div class="actionList" id="action-list"></div>
+            </div>
+            <div class="tabPanel" data-panel="storage">
+                <div class="slotGrid" id="storage-grid"></div>
+            </div>
+            <div class="tabPanel" data-panel="notes">
+                <div class="emptyNote" id="notes-body">尚無筆記。</div>
+            </div>
+
+            <!-- 顯示設定：使用者自己調外觀的地方（對應 reader_8_2 的「顯示設定」）。
+                 目前放三項：主題、紙張質感、行寬。
+                 之後的圖床選擇、過濾規則、正文規則都加在這裡。 -->
+            <div class="tabPanel" data-panel="display">
+
+                <div class="setSection">
+                    <div class="setLabel">介面主題</div>
+                    <div class="setBtnGroup" id="set-theme">
+                        <button class="setOptBtn active" data-theme="dark">深色</button>
+                        <button class="setOptBtn" data-theme="light">淺色</button>
+                    </div>
+                </div>
+
+                <div class="setSection">
+                    <div class="setLabel">紙張質感</div>
+                    <div class="setBtnGroup" id="set-tex">
+                        <button class="setOptBtn" data-tex="plain">純色</button>
+                        <button class="setOptBtn active" data-tex="local">內建紙紋</button>
+                        <button class="setOptBtn" data-tex="remote">外部貼圖</button>
+                    </div>
+                    <div class="setHint" id="set-tex-hint"></div>
+                    <div class="setUrlRow">
+                        <input type="text" id="set-tex-url" spellcheck="false"
+                               placeholder="貼圖網址（128×128 無縫圖）">
+                    </div>
+                </div>
+
+                <div class="setSection">
+                    <div class="setLabel">紙紋濃度</div>
+                    <div class="setSliderRow">
+                        <input type="range" id="set-tex-opacity" min="0" max="100" step="5">
+                        <span class="setSliderVal" id="set-tex-opacity-val"></span>
+                    </div>
+                    <div class="setHint">調到 0 等於關掉紙紋，只留底色與污漬。</div>
+                </div>
+
+                <div class="setSection">
+                    <div class="setLabel">行寬上限</div>
+                    <div class="setSliderRow">
+                        <input type="range" id="set-content-max" min="36" max="100" step="2">
+                        <span class="setSliderVal" id="set-content-max-val"></span>
+                    </div>
+                    <div class="setHint">單行太長時眼睛回到行首會找不到位置；太短則一直換行。
+                        本文、狀態面板、控制列共用這個寬度。</div>
+                </div>
+
+                <div class="setSection">
+                    <div class="setLabel">卡片高度</div>
+                    <div class="setSliderRow">
+                        <input type="range" id="set-card-height" min="480" max="1200" step="20">
+                        <span class="setSliderVal" id="set-card-height-val"></span>
+                    </div>
+                    <div class="setHint">卡片高度固定，本文超出時在本文區內部滾動，不會把整張卡片往下拉長。
+                        調高可以一次看到更多字、分頁模式下每頁裝得更多。</div>
+                </div>
+
+            </div>
+          </div>
+
+          <!-- 頁籤放在面板「下方」：使用者是從下面的狀態條點開面板的，
+               手指／游標本來就在下緣，頁籤跟著放下面可以少走一段距離。 -->
+          <div class="tabRow" id="tab-row">
+            <button data-tab="team" class="active"><span class="cn">隊伍</span><span class="en">TEAM</span></button>
+            <button data-tab="actions"><span class="cn">行動</span><span class="en">ACTIONS</span></button>
+            <button data-tab="storage"><span class="cn">收容</span><span class="en">STORAGE</span></button>
+            <button data-tab="notes"><span class="cn">筆記</span><span class="en">NOTES</span></button>
+            <button data-tab="display"><span class="cn">顯示</span><span class="en">DISPLAY</span></button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ [5] 狀態條：面板開關 ═══ -->
+    <div class="statusStrip" id="status-strip" role="button" tabindex="0" aria-expanded="false">
+        <span class="chev">▲</span>
+        <span class="stripLabel" id="strip-label">角色狀態</span>
+    </div>
+
+    <!-- ═══ [6] 底部控制列（功能鍵整合成一列）═══ -->
+    <div class="ctrlRow">
+        <button class="mode-switch">切換全文模式</button>
+        <div class="pager">
+            <button class="btn-prev" id="btn-prev" disabled>上頁</button>
+            <span class="page-num" id="page-num">1/1</span>
+            <button class="btn-next" id="btn-next" disabled>下頁</button>
+        </div>
+        <div class="rowIcons">
+            <button class="icon-btn theme-toggle" id="theme-toggle" title="切換深色／亮色">◐</button>
+            <button class="icon-btn music-toggle" id="music-toggle" title="音樂">♪</button>
+        </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   骨架的示範資料與互動
+   ⚠ 這裡的資料是「假的」，只為了讓版面能看出長相。
+     等 rpg-core 接上後，這些會改成從 ST 變數讀取。
+     欄位名稱刻意保持中性，等世界觀設定文件出來再對接。
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    /* ── 示範資料：三名角色 ──
+       欄位都是中性佔位名稱：
+         statA/B/C  → 三條狀態條（等設定文件出來再定正式名稱）
+         rank       → 階級／位階
+         tags       → 當前狀態標籤
+       立繪與頭像留空（portrait/thumb），沒圖時會顯示名字首字。 */
+    var DEMO_PARTY = [
+        {
+            name: '格林', roma: 'GRIMM', title: '偵探',
+            rank: '階級八 · 學徒',
+            statA: 82, statB: 64, statC: 91,
+            tags: ['平靜', '洞察中'],
+            desc: '從北方城鎮遷來的私家偵探。習慣在筆記本邊緣寫下無關的觀察，' +
+                  '據說那些字跡有時會自己改變位置。',
+            present: true, portrait: ''
+        },
+        {
+            name: '艾拉', roma: 'ELARA', title: '密教學者',
+            rank: '階級八 · 學徒',
+            statA: 55, statB: 88, statC: 47,
+            tags: ['專注'],
+            desc: '在大學圖書館的地下層工作了十一年。能讀出三種已無人使用的文字，' +
+                  '但拒絕說明是從哪裡學來的。',
+            present: true, portrait: ''
+        },
+        {
+            name: '索恩', roma: 'THORNE', title: '機械師',
+            rank: '階級九 · 見習',
+            statA: 94, statB: 38, statC: 72,
+            tags: ['警戒'],
+            desc: '手杖裡藏著七種工具與一樣不願提起的東西。左手總戴著手套。',
+            present: true, portrait: ''
+        }
+    ];
+
+    var DEMO_ACTIONS = ['觀察四周', '查閱筆記', '與同伴交談', '前往下一處'];
+
+    /* 三條狀態條的標籤 —— 中性佔位，等設定文件出來替換 */
+    var STAT_DEFS = [
+        { key: 'statA', cls: 'a', label: '狀態甲' },
+        { key: 'statB', cls: 'b', label: '狀態乙' },
+        { key: 'statC', cls: 'c', label: '狀態丙' }
+    ];
+
+    var party = [];
+    var charIdx = 0;
+
+    function $(id) { return document.getElementById(id); }
+
+    function clamp(n) {
+        n = Number(n);
+        if (isNaN(n)) return 0;
+        return Math.max(0, Math.min(100, n));
+    }
+
+    function esc(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    /* ── 放圖片，失敗時退回名字首字（避免破圖）── */
+    function fillPortrait(box, ch, url) {
+        box.innerHTML = '';
+        var initial = document.createElement('span');
+        initial.className = 'initial';
+        initial.textContent = ch.name ? ch.name.charAt(0) : '?';
+
+        if (!url) { box.appendChild(initial); return; }
+
+        var img = document.createElement('img');
+        img.alt = ch.name || '';
+        img.onerror = function () {
+            box.innerHTML = '';
+            box.appendChild(initial);
+        };
+        img.src = url;
+        box.appendChild(img);
+    }
+
+    /* ── 渲染縮圖切換帶 ── */
+    function renderQueue() {
+        var strip = $('queue-strip');
+        strip.innerHTML = '';
+
+        party.forEach(function (c, i) {
+            var t = document.createElement('button');
+            t.className = 'thumb' + (i === charIdx ? ' active' : '');
+            t.title = c.name;
+            fillPortrait(t, c, c.thumb || c.portrait);
+            t.onclick = function () { selectChar(i); };
+            strip.appendChild(t);
+        });
+
+        var multi = party.length > 1;
+        $('char-prev').disabled = !multi;
+        $('char-next').disabled = !multi;
+    }
+
+    /* ── 渲染右側資訊欄 ── */
+    function renderInfo() {
+        var c = party[charIdx];
+
+        if (!c) {
+            $('char-name').textContent = '—';
+            $('char-roma').textContent = '';
+            $('char-title').textContent = '';
+            $('stat-bars').innerHTML = '';
+            $('chip-row').innerHTML = '';
+            $('char-desc').textContent = '';
+            $('portrait-box').innerHTML = '';
+            return;
+        }
+
+        $('char-roma').textContent = c.roma || '';
+        $('char-name').textContent = c.name || '';
+        $('char-title').textContent = c.title || '';
+        $('char-desc').textContent = c.desc || '';
+
+        fillPortrait($('portrait-box'), c, c.portrait);
+
+        // 三條狀態條（帶標籤與數值）
+        var bars = $('stat-bars');
+        bars.innerHTML = '';
+        STAT_DEFS.forEach(function (d) {
+            var v = clamp(c[d.key]);
+            var row = document.createElement('div');
+            row.className = 'statBar ' + d.cls;
+            row.innerHTML =
+                '<span class="lb">' + esc(d.label) + '</span>' +
+                '<span class="track"><span class="fill" style="width:' + v + '%"></span></span>' +
+                '<span class="num">' + v + '</span>';
+            bars.appendChild(row);
+        });
+
+        // 數值 chip
+        var chips = $('chip-row');
+        chips.innerHTML = '';
+        if (c.rank) chips.appendChild(makeChip('階級', c.rank, 'rank'));
+        if (c.tags && c.tags.length) chips.appendChild(makeChip('狀態', c.tags.join('、'), 'tags'));
+    }
+
+    function makeChip(label, value, extraCls) {
+        var chip = document.createElement('div');
+        chip.className = 'chip' + (extraCls ? ' ' + extraCls : '');
+        chip.innerHTML =
+            '<span class="lb">' + esc(label) + '</span>' +
+            '<span class="vl">' + esc(value) + '</span>';
+        return chip;
+    }
+
+    /* ── 切換角色 ── */
+    function selectChar(i) {
+        if (!party.length) return;
+        charIdx = (i + party.length) % party.length;
+
+        var thumbs = $('queue-strip').children;
+        [].forEach.call(thumbs, function (t, idx) {
+            t.classList.toggle('active', idx === charIdx);
+        });
+
+        // 讓選中的縮圖滾進可視範圍（縮圖多於可視寬度時才有作用）
+        var active = thumbs[charIdx];
+        if (active && active.scrollIntoView) {
+            active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+
+        renderInfo();
+        reportHeight();
+    }
+
+    function renderParty(list) {
+        party = Array.isArray(list) ? list : [];
+        charIdx = 0;
+
+        if (!party.length) {
+            $('queue-strip').innerHTML = '';
+            $('char-prev').disabled = true;
+            $('char-next').disabled = true;
+        } else {
+            renderQueue();
+        }
+        renderInfo();
+    }
+
+    /* ── 渲染行動列表 ── */
+    function renderActions(list) {
+        var box = $('action-list');
+        box.innerHTML = '';
+        if (!list || !list.length) {
+            box.innerHTML = '<div class="emptyNote">目前沒有可用的行動。</div>';
+            return;
+        }
+        list.forEach(function (a) {
+            var b = document.createElement('button');
+            b.textContent = a;
+            box.appendChild(b);
+        });
+    }
+
+    /* ── 渲染收容格 ── */
+    function renderStorage(count) {
+        var grid = $('storage-grid');
+        grid.innerHTML = '';
+        for (var i = 0; i < count; i++) {
+            var d = document.createElement('div');
+            d.className = 'slot';
+            d.textContent = '◇';
+            grid.appendChild(d);
+        }
+    }
+
+    /* ── 頂部時間列 ── */
+    function setHud(place, sky, hour, minute) {
+        $('hud-place').textContent = place || '—';
+        $('hud-sky').textContent = sky || '—';
+
+        var h = Number(hour), m = Number(minute);
+        if (!isNaN(h) && !isNaN(m)) {
+            var watch = $('pocket-watch');
+            watch.style.setProperty('--hourAngle', ((h % 12) * 30 + m * 0.5) + 'deg');
+            watch.style.setProperty('--minAngle', (m * 6) + 'deg');
+        }
+    }
+
+    /* ── 角色切換箭頭 ── */
+    $('char-prev').onclick = function () { selectChar(charIdx - 1); };
+    $('char-next').onclick = function () { selectChar(charIdx + 1); };
+
+    /* ── 頁籤切換 ── */
+    $('tab-row').addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-tab]');
+        if (!btn) return;
+        var target = btn.dataset.tab;
+
+        this.querySelectorAll('button').forEach(function (b) {
+            b.classList.toggle('active', b === btn);
+        });
+        document.querySelectorAll('.tabPanel').forEach(function (p) {
+            p.classList.toggle('active', p.dataset.panel === target);
+        });
+        reportHeight();
+    });
+
+    /* ── 主題切換 ──
+       控制列的按鈕與「顯示設定」裡的深/淺選項共用這一個函式，
+       所以兩邊永遠一致，不會出現「按了按鈕但設定面板還顯示舊值」。
+       接上 rpg-core 後由 setTheme() 接手。 */
+    var root = document.querySelector('.rpg-v7-root');
+
+    function applyTheme(theme) {
+        var isLight = (theme === 'light');
+        root.classList.toggle('light-mode', isLight);
+
+        var btn = $('theme-toggle');
+        btn.textContent = isLight ? '◑' : '◐';
+        btn.title = isLight ? '切換深色' : '切換亮色';
+
+        markActive('set-theme', 'theme', theme);
+    }
+
+    $('theme-toggle').onclick = function () {
+        applyTheme(root.classList.contains('light-mode') ? 'dark' : 'light');
+    };
+
+    /* ══ 顯示設定 ══════════════════════════════════════════════════
+       把「外觀怎麼呈現」交給使用者，而不是我們單方面決定。
+       每一項的共同做法：改 root 上的 class 或 CSS 變數 —— 不動 DOM 結構，
+       所以切換是即時的，也不會影響本文內容。 */
+
+    /* 把一組互斥按鈕的 .active 標到對應的那顆上 */
+    function markActive(groupId, attr, value) {
+        var group = $(groupId);
+        if (!group) return;
+        group.querySelectorAll('button').forEach(function (b) {
+            b.classList.toggle('active', b.dataset[attr] === value);
+        });
+    }
+
+    /* ── 紙張質感三種模式 ──
+       純色      ：完全不畫貼圖層，最省
+       內建紙紋  ：用內嵌的 data URI，離線與 CDN 不通時都還在
+       外部貼圖  ：用網址載圖，換紙紋只要換網址、不必重發卡片
+       三者只差 --texImage 指向哪裡，切換不新增／移除任何元素。 */
+    var TEX_MODES = {
+        plain: {
+            hint: '只用底色與污漬漸層，不載任何圖。最省資源，紙的纖維感也最弱。'
+        },
+        local: {
+            hint: '紙紋直接嵌在卡片裡（約 17 KB），離線也不會掉。' +
+                  '代價是想換紙紋得重新發布整張卡片。'
+        },
+        remote: {
+            hint: '從網址載一張 128×128 無縫圖，換紙紋只要換網址、不必重發卡片。' +
+                  '若網址載不到，這一層就不會畫出來（等同純色），底下的紙色仍在。'
+        }
+    };
+    var texMode = 'local';
+
+    function applyTexMode(mode) {
+        if (!TEX_MODES[mode]) mode = 'local';
+        texMode = mode;
+
+        root.classList.remove('tex-plain', 'tex-local', 'tex-remote');
+        root.classList.add('tex-' + mode);
+
+        $('set-tex-hint').textContent = TEX_MODES[mode].hint;
+        markActive('set-tex', 'tex', mode);
+        updateTexUrlHint();
+    }
+
+    $('set-tex').addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-tex]');
+        if (btn) applyTexMode(btn.dataset.tex);
+    });
+
+    /* 外部貼圖網址。
+       延遲 500ms 才套用：否則每打一個字都會發一次請求
+       （打「mypaper.png」會連發 12 次無效請求）。 */
+    var texUrlTimer = null;
+    function applyTexUrl(url) {
+        url = String(url || '').trim().replace(/["'\\]/g, '');
+        if (url) {
+            root.style.setProperty('--texRemote', 'url("' + url + '")');
+        } else {
+            // 移除後退回 CSS 的 --texRemote: none，也就是不畫這層
+            root.style.removeProperty('--texRemote');
+        }
+        updateTexUrlHint();
+    }
+
+    /* 外部模式但網址還空著時要說清楚，否則畫面看起來像純色、使用者會以為壞了 */
+    function updateTexUrlHint() {
+        if (texMode !== 'remote') return;
+        var empty = !$('set-tex-url').value.trim();
+        $('set-tex-hint').textContent = empty
+            ? '尚未填網址，目前不會畫紙紋（等同純色）。填入一張 128×128 無縫圖的網址即可套用。'
+            : TEX_MODES.remote.hint;
+    }
+
+    $('set-tex-url').addEventListener('input', function () {
+        var val = this.value;
+        clearTimeout(texUrlTimer);
+        texUrlTimer = setTimeout(function () { applyTexUrl(val); }, 500);
+    });
+
+    /* ── 紙紋濃度 ──
+       深色與淺色的合適濃度不同（深色 .34 / 淺色 .3），
+       所以這裡調的是「相對於當前主題」的絕對值，切主題時不自動改。 */
+    function applyTexOpacity(pct) {
+        root.style.setProperty('--texOpacity', (pct / 100).toFixed(2));
+        $('set-tex-opacity-val').textContent = pct + '%';
+        $('set-tex-opacity').value = pct;
+    }
+    $('set-tex-opacity').addEventListener('input', function () {
+        applyTexOpacity(Number(this.value));
+    });
+
+    /* ── 行寬上限 ──
+       改 --contentMax 的上限值（rem）。本文、狀態面板、控制列共用這個變數，
+       所以三者會一起變寬變窄，左右邊緣始終對齊。 */
+    function applyContentMax(rem) {
+        root.style.setProperty('--contentMax', 'clamp(20rem, 82vw, ' + rem + 'rem)');
+        $('set-content-max-val').textContent = rem + 'rem';
+        $('set-content-max').value = rem;
+        /* 行寬變了，每頁裝得下的段落數也會變 —— 分頁模式下要重新切頁 */
+        repaginateSoon();
+        reportHeight();
+    }
+    $('set-content-max').addEventListener('input', function () {
+        applyContentMax(Number(this.value));
+    });
+
+    /* ── 卡片高度 ──
+       卡片高度固定，本文超出時在本文區內部滾動。
+       改高度會直接改變「一頁裝得下多少」，所以也要重新切頁。 */
+    function applyCardHeight(px) {
+        root.style.setProperty('--cardHeight', px + 'px');
+        $('set-card-height-val').textContent = px + 'px';
+        $('set-card-height').value = px;
+        repaginateSoon();
+        reportHeight();
+    }
+    $('set-card-height').addEventListener('input', function () {
+        applyCardHeight(Number(this.value));
+    });
+
+    $('set-theme').addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-theme]');
+        if (btn) applyTheme(btn.dataset.theme);
+    });
+
+    /* ── 狀態面板收合／展開 ──
+       平時收起，把空間留給本文；這是 reader_8_2 的核心行為。 */
+    var strip = $('status-strip');
+    function toggleSheet(force) {
+        var open = (typeof force === 'boolean')
+            ? force
+            : !root.classList.contains('sheet-open');
+        root.classList.toggle('sheet-open', open);
+        strip.setAttribute('aria-expanded', open ? 'true' : 'false');
+        $('strip-label').textContent = open ? '收起狀態' : '角色狀態';
+        /* 展開／收合會改變本文區的可視高度（面板是從下方擠上來的），
+           所以每頁裝得下的量也跟著變 —— 分頁模式下必須重新切頁，
+           否則收起面板後每頁只剩原本那一小段，畫面會留一大片空白。
+           等 .34s 的展開動畫跑完再量，否則量到的是中間值。 */
+        setTimeout(function () {
+            reportHeight();
+            if (root.classList.contains('paged-mode')) paginate();
+        }, 380);
+    }
+    strip.onclick = function () { toggleSheet(); };
+    strip.onkeydown = function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSheet(); }
+    };
+
+    /* ── 音樂鍵（骨架階段只切外觀，接上 rpg-core 後由 toggleMute() 接手）── */
+    $('music-toggle').onclick = function () {
+        this.classList.toggle('muted');
+        this.title = this.classList.contains('muted') ? '已靜音' : '音樂';
+    };
+
+    /* ── 全文／分頁模式切換 ──
+       沿用 rpg-core 的慣例：root 上有 .paged-mode 才顯示分頁列。 */
+    document.querySelector('.mode-switch').onclick = function () {
+        var paged = root.classList.toggle('paged-mode');
+        this.textContent = paged ? '切換全文模式' : '切換分頁模式';
+        if (paged) { paginate(); } else { showAllText(); }
+        reportHeight();
+    };
+
+    /* ══ 分頁 ═════════════════════════════════════════════════════════
+       切頁的依據是「量出來的實際高度」，不是字數。
+       原因：閱讀區現在是固定高度，若按字數切（例如每頁 550 字），
+       同樣字數在手機與桌機、在不同行寬設定下佔的高度完全不同，
+       結果就是有的頁留一大片空白、有的頁還是要滾動 —— 那分頁就沒意義了。
+
+       做法：把段落逐一放進閱讀區，一放進去就量 scrollHeight，
+       一超過可視高度就把這段退回去、成為下一頁的開頭。
+       量的是真實排版結果，所以每頁都剛好填滿而不溢出。
+       ═════════════════════════════════════════════════════════════════ */
+    var allParas = [];      // 原始段落（HTML 字串），切頁的素材
+    var pages = [];          // 每頁是一段 HTML 字串
+    var currPage = 0;
+
+    function textEl() { return document.querySelector('.text-display'); }
+    function stageEl() { return document.querySelector('.stage'); }
+
+    /* 把目前本文拆成段落陣列。分頁與全文模式共用同一份素材。 */
+    function captureParas(html) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        allParas = Array.prototype.map.call(tmp.children, function (el) {
+            return el.outerHTML;
+        });
+        if (!allParas.length && html.trim()) allParas = [html];
+    }
+
+    function showAllText() {
+        textEl().innerHTML = allParas.join('');
+        applyDropCap();
+        stageEl().scrollTop = 0;
+    }
+
+    /* 與 showAllText 相同，但不動捲軸位置。
+       串流時每 150ms 就重繪一次，若每次都歸零再拉到底，畫面會不斷閃跳；
+       捲動位置改由呼叫端（processRaw）決定。 */
+    function showAllTextKeepScroll() {
+        textEl().innerHTML = allParas.join('');
+        applyDropCap();
+    }
+
+    /* 首字下沉只該出現在「整篇的第一段」。
+       分頁時每頁都是新的 :first-of-type，若不管就會每頁都來一個大字。 */
+    function applyDropCap() {
+        textEl().classList.toggle('show-drop-cap', !root.classList.contains('paged-mode') || currPage === 0);
+    }
+
+    function paginate() {
+        var el = textEl(), stage = stageEl();
+        if (!allParas.length) { pages = ['']; currPage = 0; renderPage(); return; }
+
+        /* 可用高度＝閱讀區可視高度減掉上下 padding。
+           量之前先清空，否則量到的是「舊內容 + 新內容」的高度。 */
+        var cs = getComputedStyle(stage);
+        var avail = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+        if (!(avail > 0)) avail = 400;      /* 還沒排版完就給個保守值，之後 resize 會重算 */
+
+        pages = [];
+        var buf = [];
+        el.classList.add('show-drop-cap');  /* 用最壞情況（有首字下沉、佔位最大）量，寧可少放一段也不要溢出 */
+
+        for (var i = 0; i < allParas.length; i++) {
+            buf.push(allParas[i]);
+            el.innerHTML = buf.join('');
+            if (el.scrollHeight > avail && buf.length > 1) {
+                buf.pop();                  /* 這段放不下，退回去當下一頁的開頭 */
+                pages.push(buf.join(''));
+                buf = [allParas[i]];
+            }
+        }
+        if (buf.length) pages.push(buf.join(''));
+        if (!pages.length) pages = [''];
+
+        if (currPage > pages.length - 1) currPage = pages.length - 1;
+        if (currPage < 0) currPage = 0;
+        renderPage();
+    }
+
+    function renderPage() {
+        textEl().innerHTML = pages[currPage] || '';
+        applyDropCap();
+        stageEl().scrollTop = 0;
+
+        $('page-num').textContent = (currPage + 1) + '/' + pages.length;
+        $('btn-prev').disabled = (currPage <= 0);
+        $('btn-next').disabled = (currPage >= pages.length - 1);
+    }
+
+    function goPage(n) {
+        if (n < 0 || n > pages.length - 1) return;
+        currPage = n;
+        renderPage();
+    }
+
+    $('btn-prev').onclick = function () { goPage(currPage - 1); };
+    $('btn-next').onclick = function () { goPage(currPage + 1); };
+
+    /* 鍵盤左右鍵翻頁（只在分頁模式下作用） */
+    document.addEventListener('keydown', function (e) {
+        if (!root.classList.contains('paged-mode')) return;
+        if (e.target.matches('input, textarea')) return;   /* 別搶走設定欄位的方向鍵 */
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); goPage(currPage - 1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); goPage(currPage + 1); }
+    });
+
+    /* 視窗大小或行寬改變會讓每頁裝得下的量改變 —— 必須重新切頁。
+       用 debounce 避免拖動視窗時每一格像素都重算一次。 */
+    var repagTimer = null;
+    function repaginateSoon() {
+        if (!root.classList.contains('paged-mode')) return;
+        clearTimeout(repagTimer);
+        repagTimer = setTimeout(paginate, 180);
+    }
+    window.addEventListener('resize', repaginateSoon);
+
+    /* ── 回報高度給宿主 ──
+       這是 iframe 契約的一部分：宿主靠這個訊息決定 iframe 高度。
+       卡片改成固定高度後，這裡不能再用 scrollHeight：
+       內容超出時是在本文區內部滾動，scrollHeight 不再代表「卡片要多高」。
+       改成回報卡片自己的高度（offsetHeight），下限仍是 720px。
+       路線 D（同文檔 div）確定後這段可以移除。 */
+    var lastH = 0;
+    function reportHeight() {
+        requestAnimationFrame(function () {
+            var h = Math.max(root.offsetHeight, 720);
+            if (Math.abs(h - lastH) < 4) return;
+            lastH = h;
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'RPG_MVU_RESIZE', height: h }, '*');
+                }
+            } catch (e) { /* 跨域時忽略 */ }
+        });
+    }
+    window.requestParentResize = reportHeight;
+
+    /* ══ 本文接入（真實 SillyTavern）═════════════════════════════════
+       以下這一段是「宿主推文字進來 → 變成畫面上的段落」的完整路徑。
+       骨架原本只顯示寫死的 DEMO_TEXT，接上這段之後才能顯示模型的實際輸出。
+
+       流程：
+         RPG_MVU_UPDATE(原始訊息, {streaming})
+           → extractContent()  從原始訊息裡挖出正文（丟掉思考標籤、變量區塊）
+           → toParagraphs()    依空行切段，順便做對話高亮
+           → captureParas()    交給既有的分頁／全文渲染
+
+       這裡刻意只做「顯示正文」需要的最小處理。
+       rpg-core 的使用者自訂過濾規則（過濾規則／正文規則）需要讀 ST 變數，
+       屬於下一步的事；現在先確認正文本身能不能正確出現。
+       ═════════════════════════════════════════════════════════════════ */
+
+    /* 正文容器標籤，與 rpg-core 的 CONFIG.CONTENT_TAG 一致。
+       模型的輸出長這樣：[RPG]正文…[/RPG]<JSONPatch>變量…</JSONPatch> */
+    var CONTENT_TAG = 'RPG';
+    var STATE_TAG   = 'JSONPatch';
+
+    var reContentComplete = new RegExp('(?:\\[|<)\\s*' + CONTENT_TAG + '\\s*(?:\\]|>)([\\s\\S]*?)(?:\\[|<)\\/\\s*' + CONTENT_TAG + '\\s*(?:\\]|>)', 'i');
+    var reContentOpenOnly = new RegExp('(?:\\[|<)\\s*' + CONTENT_TAG + '\\s*(?:\\]|>)([\\s\\S]*)$', 'i');
+    var reStateClose      = new RegExp('<\\/' + STATE_TAG + '>', 'i');
+
+    /* 從模型的原始訊息中取出正文。
+       流式生成時開頭標籤已出現、結尾還沒到，所以 open-only 那條分支是必要的，
+       否則生成過程中畫面會一直空白，只在最後一刻整篇跳出來。 */
+    function extractContent(input) {
+        var str = typeof input === 'string' ? input : (input && typeof input === 'object' ? String(Object.values(input)[0] || '') : String(input || ''));
+        var c = str;
+
+        /* 思考過程不是正文，先丟掉。分成「成對」與「只剩結尾」兩種：
+           流式中 <thinking> 可能已被前一個 chunk 吃掉，只剩 </thinking>。 */
+        c = c.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+        c = c.replace(/<think>[\s\S]*?<\/think>/gi, '');
+        c = c.replace(/\[metacognition\][\s\S]*?\[\/metacognition\]/gi, '');
+        c = c.replace(/<!--[\s\S]*?-->/g, '');
+        c = c.replace(/^[\s\S]*?<\/thinking>/i, '');
+        c = c.replace(/^[\s\S]*?<\/think>/i, '');
+        c = c.replace(/^[\s\S]*?\[\/metacognition\]/i, '');
+
+        var m = c.match(reContentComplete);
+        if (m) return m[1].trim();
+        m = c.match(reContentOpenOnly);
+        if (m) return m[1].trim();
+
+        /* 沒有正文標籤：骨架階段照樣顯示，方便你用任何一段回覆試看看
+           （rpg-core 在這裡是回空字串、不渲染原始文本）。
+           變量區塊要先切掉，否則整段 JSON 會出現在畫面上。 */
+        return c.replace(new RegExp('<' + STATE_TAG + '>[\\s\\S]*?<\\/' + STATE_TAG + '>', 'gi'), '')
+                .replace(new RegExp('<' + STATE_TAG + '>[\\s\\S]*$', 'i'), '')
+                .trim();
+    }
+
+    /* 對話與強調的高亮。順序沿用 rpg-core 的註解說明：
+       英文雙引號必須最先處理 —— 一旦先產生了 <span class="…">，
+       後面的雙引號規則就會咬到標籤屬性裡的引號，把 HTML 打壞。
+       中文引號不與 HTML 屬性衝突，放最後最安全。
+
+       與 reader_8_2 的一個差異：星號強調 *文字* 只保留文字、去掉星號。
+       星號是 markdown 的標記，作用已由字體與顏色表達，留在畫面上
+       看起來像沒處理完的原始碼。中文引號「」『』本身是標點，要保留。 */
+    function highlight(t) {
+        return String(t)
+            .replace(/"([^"]*?)"/g, '<span class="highlight-dialogue">"$1"</span>')
+            .replace(/\*([^*\n]+)\*/g, '<span class="highlight-emphasis">$1</span>')
+            .replace(/(『)([\s\S]*?)(』)/g, '<span class="highlight-emphasis">$1$2$3</span>')
+            .replace(/([「“])([\s\S]*?)([」”])/g, '<span class="highlight-dialogue">$1$2$3</span>');
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    /* 純文字正文 → <p> 段落。
+       模型輸出用空行分段；先轉義再高亮，才不會讓正文裡的 < > 破壞排版。
+       引號開頭的段落補 .dialogue（骨架已有這個樣式，是概念圖裡的對話框）。 */
+    var OPENERS = '「『“＂"‘';
+    function toParagraphs(text) {
+        if (!text || !text.trim()) return '';
+        return text.split(/\n\s*\n+/).map(function (para) {
+            var t = para.trim();
+            if (!t) return '';
+            var cls = OPENERS.indexOf(t[0]) >= 0 ? ' class="dialogue"' : '';
+            /* 段落內的單一換行保留成 <br>，不然詩行或短句會被併成一大段 */
+            return '<p' + cls + '>' + highlight(escapeHtml(t)).replace(/\n/g, '<br>') + '</p>';
+        }).join('');
+    }
+
+    /* ── 串流節流 ──
+       每個 token 都會呼叫 updateTemplateVariables。若每次都重新提取＋重建
+       innerHTML，成本隨訊息長度成長，整體是 O(N²)，長回覆會明顯卡頓。
+       做法與 rpg-core [F] 相同：leading + trailing 節流 ——
+       第一個 chunk 立刻處理（畫面馬上有東西），之後每 150ms 最多一次，
+       且永遠處理「最新」內容；生成結束再由 flush 保證最後一版一定渲染。 */
+    var STREAM_THROTTLE_MS = 150;
+    var streamTimer = null;
+    var pendingRaw = null;
+    var lastProcessedRaw = null;
+    var isGenerating = false;
+    var safeUnlockTimer = null;
+    var lastRenderedText = null;
+
+    function setGenerating(on) {
+        isGenerating = !!on;
+        root.classList.toggle('generating', isGenerating);
+    }
+
+    function processRaw(raw) {
+        var text = extractContent(raw);
+
+        /* 內容沒變就不重繪。串流中很多 chunk 只動到變量區塊或思考標籤，
+           提取出的正文其實一模一樣，這時重建 innerHTML 純屬浪費。 */
+        if (text === lastRenderedText) return;
+        lastRenderedText = text;
+
+        captureParas(toParagraphs(text));
+
+        /* 串流中一律走全文模式，不做分頁。
+           理由：串流時長度每 150ms 都在變，若同時做量測式分頁，
+           頁數會不斷跳動、使用者正在讀的那一頁會被抽換掉。
+           分頁在生成結束後才切（見 finish()）。 */
+        if (isGenerating) {
+            /* 捲動位置要在重繪「之前」判斷：
+               先看使用者原本是不是貼在底部，重繪後才決定要不要跟著往下。
+               若他自己往上滾去讀前文，就不要把他拉回底部 —— 串流每 150ms
+               重繪一次，硬拉會讓他根本沒辦法回頭讀。 */
+            var st = stageEl();
+            var wasAtBottom = (st.scrollHeight - st.clientHeight - st.scrollTop) < 40;
+            var keep = st.scrollTop;
+            showAllTextKeepScroll();
+            st.scrollTop = wasAtBottom ? st.scrollHeight : keep;
+        } else if (root.classList.contains('paged-mode')) {
+            paginate();
+        } else {
+            showAllText();
+        }
+        reportHeight();
+    }
+
+    function flushStream() {
+        if (streamTimer) { clearTimeout(streamTimer); streamTimer = null; }
+        if (pendingRaw !== null && pendingRaw !== lastProcessedRaw) {
+            processRaw(pendingRaw);
+            lastProcessedRaw = pendingRaw;
+        }
+    }
+
+    function scheduleProcess(raw) {
+        pendingRaw = raw;
+        if (streamTimer) return;
+        processRaw(pendingRaw);
+        lastProcessedRaw = pendingRaw;
+        streamTimer = setTimeout(function tick() {
+            streamTimer = null;
+            if (pendingRaw !== lastProcessedRaw) {
+                processRaw(pendingRaw);
+                lastProcessedRaw = pendingRaw;
+                streamTimer = setTimeout(tick, STREAM_THROTTLE_MS);
+            }
+        }, STREAM_THROTTLE_MS);
+    }
+
+    /* 生成結束的收尾：解除 generating、渲染最後一版、該分頁的才分頁。 */
+    function finish(raw) {
+        var wasGenerating = isGenerating;
+        setGenerating(false);
+        clearTimeout(safeUnlockTimer);
+        if (raw) { pendingRaw = raw; }
+        flushStream();
+        /* 生成中被強制留在全文模式，結束後補回分頁（從第一頁開始讀）。 */
+        if (root.classList.contains('paged-mode')) {
+            currPage = 0;
+            paginate();
+        } else if (wasGenerating) {
+            /* 全文模式：串流時捲軸跟著字跑到了下方（或使用者自己滾去讀前文），
+               生成結束該把它帶回開頭，否則使用者要自己往上滑才能從頭讀。
+               只在「剛剛真的在生成」時才做 —— 否則使用者手動要求刷新時，
+               他正在讀的位置會被無故重置。
+               注意 flushStream 可能因內容未變而沒有重繪，所以這裡要自己歸零。 */
+            stageEl().scrollTop = 0;
+        }
+        reportHeight();
+    }
+
+    /* ── iframe 契約的三個入口 ──
+       Vue.txt 的 waitForFrameReady 會輪詢這些函式是否存在，
+       有了它們宿主才認得這張卡片、才會把訊息推進來。 */
+
+    /* 入口 1：每個串流 chunk */
+    window.updateTemplateVariables = function (data) {
+        /* 安全重置：萬一 MESSAGE_RECEIVED 沒到（換頁、中斷生成），
+           generating 會永遠鎖住、狀態條的箭頭會一直閃。 */
+        clearTimeout(safeUnlockTimer);
+        safeUnlockTimer = setTimeout(function () {
+            if (!isGenerating) return;
+            setGenerating(false);
+            flushStream();
+            if (root.classList.contains('paged-mode')) { currPage = 0; paginate(); }
+        }, 8000);
+
+        if (!isGenerating) setGenerating(true);
+        var raw = typeof data === 'string' ? data
+                : (data && data[CONTENT_TAG] ? String(data[CONTENT_TAG]) : String(data || ''));
+        scheduleProcess(raw);
+    };
+
+    /* 入口 2：強制刷新（生成結束或外部要求） */
+    window.RPG_FORCE_REFRESH_FROM_VARIABLES = function (rawData) {
+        try { finish(rawData || pendingRaw || ''); return true; }
+        catch (e) { console.error('[骨架] 強制刷新失敗:', e); return false; }
+    };
+
+    /* 入口 3：統一入口，宿主主要呼叫這個 */
+    window.RPG_MVU_UPDATE = function (rawData, options) {
+        options = options || {};
+        window.RPG_IS_STREAMING = !!options.streaming;
+        window.RPG_MESSAGE_ID = options.message_id != null ? options.message_id : null;
+        window.updateTemplateVariables(rawData);
+        if (!window.RPG_IS_STREAMING) window.RPG_FORCE_REFRESH_FROM_VARIABLES(rawData);
+    };
+
+    /* 宿主用這個旗標判斷卡片已就緒 */
+    window.RPG_MVU_READY = true;
+
+    /* ── 示範內容 ──
+       只在「宿主沒有推任何內容進來」時顯示（例如直接用瀏覽器開這個檔案）。
+       真實 ST 裡第一個 chunk 一到就會被模型的輸出取代。
+       段落刻意做到 30 段以上，才看得出分頁與內部滾動的行為。 */
+    var DEMO_TEXT =
+        '<p>示范文本1，' +
+        '示范文本2。</p>' +
+        '<p class="dialogue">「示范文本3。」示范文本4。' +
+        '杖頭刻著的紋路在霧裡泛著極淡的光。</p>' +
+        '<p>示范文本5，' +
+        '只剩下半個字還看得出輪廓。<span class="highlight-emphasis">示范文本6，' +
+        '示范文本7。</span></p>' +
+        '<p>示范文本8。' +
+        '<span class="highlight-dialogue">「示范文本9。」</span></p>';
+
+    /* 第 10 段之後用迴圈補齊，每段標上編號 —— 翻頁時一眼就能確認
+       「這一頁的最後一段」與「下一頁的第一段」是連續的、沒有漏段或重複。 */
+    for (var d = 10; d <= 34; d++) {
+        DEMO_TEXT += '<p>示范文本' + d + '，這是第 ' + d +
+            ' 段示範文字，用來把本文撐長到需要分頁或滾動的長度。</p>';
+    }
+
+    function boot() {
+        /* 本文先進 allParas，再由模式決定怎麼呈現。
+           若宿主已經推過內容（lastRenderedText 不是 null），就不要拿示範文字蓋掉它 ——
+           iframe 裡腳本執行與宿主推送的先後順序不保證，這個判斷是必要的。 */
+        if (lastRenderedText === null) {
+            captureParas(DEMO_TEXT);
+            showAllText();
+        }
+        setHud('倫敦時間 23:45', '紅月相', 23, 45);
+        renderParty(DEMO_PARTY);
+        renderActions(DEMO_ACTIONS);
+        renderStorage(8);
+
+        /* 顯示設定的初始值 —— 要跟 CSS 裡的預設對齊，
+           否則面板上的數字會跟畫面實際長相不一致。 */
+        applyTheme('dark');
+        applyTexMode('local');
+        applyTexOpacity(34);        /* 對應 CSS 的 --texOpacity: .34 */
+        applyContentMax(68);        /* 對應 CSS 的 clamp(…, 68rem) */
+
+        /* 卡片高度滑桿的初始值＝目前實際算出來的高度（CSS 預設是 100vh），
+           這樣滑桿上的數字一開始就跟畫面一致，而不是隨便給個數。 */
+        applyCardHeight(Math.round(root.offsetHeight));
+
+        reportHeight();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+
+    /* 對外暴露，方便在 DevTools 裡調整看效果 */
+    window.SKELETON = {
+        setHud: setHud,
+        renderParty: renderParty,
+        renderActions: renderActions,
+        renderStorage: renderStorage,
+        selectChar: selectChar,
+        toggleSheet: toggleSheet,
+        /* 顯示設定：接上 rpg-core 後，這幾個會改成寫入 ST 變數再套用，
+           讓使用者的選擇能跨樓層、跨對話保留。 */
+        setTheme: applyTheme,
+        setTexMode: applyTexMode,
+        setTexOpacity: applyTexOpacity,
+        setContentMax: applyContentMax,
+        setCardHeight: applyCardHeight,
+        /* 分頁：真實 ST 裡本文由 RPG_MVU_UPDATE 推入，setText 是本地試看用的。 */
+        setText: function (html) {
+            lastRenderedText = html;      /* 標記已有內容，boot 不會再蓋上示範文字 */
+            captureParas(html);
+            if (root.classList.contains('paged-mode')) { currPage = 0; paginate(); }
+            else { showAllText(); }
+        },
+        /* 用模型的原始輸出格式試看（含 [RPG] 標籤、思考標籤、變量區塊），
+           在 DevTools 裡貼一段真實回覆就能確認提取與排版對不對。 */
+        feedRaw: function (raw, streaming) {
+            window.RPG_MVU_UPDATE(raw, { streaming: !!streaming });
+        },
+        extractContent: extractContent,
+        toParagraphs: toParagraphs,
+        paginate: paginate,
+        goPage: goPage,
+        pageCount: function () { return pages.length; },
+        currentPage: function () { return currPage; },
+        sourceParaCount: function () { return allParas.length; },
+        texModes: Object.keys(TEX_MODES),
+        statDefs: STAT_DEFS,
+        demoParty: DEMO_PARTY
+    };
+})();
+</script>
+
+</body>
+</html>
