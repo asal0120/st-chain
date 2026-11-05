@@ -32,7 +32,7 @@
   <div class="head"><b>立體場景樣本</b><span id="fps"></span><button id="toggle">收合</button></div>
   <div class="body">
     <div class="row"><span>地點</span>
-      <button data-type="residence" class="on">住宅</button><button data-type="london">倫敦街區</button>
+      <button data-type="residence" class="on">住宅</button><button data-type="london">倫敦街區</button><button data-type="woodland">林地</button><button data-type="factory">工廠</button>
       <button id="reroll">換一張</button><span id="seedLabel"></span></div>
     <div class="row"><span>時段</span><button data-time="day" class="on">白天</button><button data-time="dusk">黃昏</button><button data-time="night">夜晚</button></div>
     <div class="row"><span>後製</span>
@@ -153,6 +153,17 @@ function buildTextures(){
   T.slate=canvasTex(TEX,TEX,(g,px,r)=>{px(0,0,'#2c3236',TEX,TEX);for(let row=0;row<8;row++){const off=row%2?3:0;for(let x=-off;x<TEX;x+=6){const c=pick(r,['#3d454a','#454e54','#383f44','#4a5258']);px(x+1,row*4,c,5,3);px(x+1,row*4+3,shade(c,.6),5,1);}}},{seed:24});
   T.tile=canvasTex(TEX,TEX,(g,px,r)=>{px(0,0,'#5a2e22',TEX,TEX);for(let row=0;row<8;row++){const off=row%2?4:0;for(let x=-off;x<TEX;x+=8){const c=pick(r,['#8a4632','#9a5038','#7c3f2c']);px(x+1,row*4,c,7,3);px(x+1,row*4+3,shade(c,.55),7,1);}}},{seed:25});
   T.iron=canvasTex(8,8,(g,px)=>{px(0,0,'#1f2522',8,8);px(1,0,'#3a4440',1,8);},{seed:26});
+  // 工廠地面：水泥、防滑鐵板
+  T.concrete=canvasTex(TEX,TEX,(g,px,r)=>{px(0,0,'#5c5a54',TEX,TEX);for(let k=0;k<110;k++)px(r()*TEX,r()*TEX,pick(r,['#55534d','#63615a','#4e4c47']),1,1);
+    px(0,0,'#46443f',TEX,1);px(0,0,'#46443f',1,TEX);let x=r()*TEX|0,y=0;while(y<TEX){px(x,y,'#4a4843',1,1);x+=r()<.5?1:-1;y++;}},{seed:41});
+  T.treadplate=canvasTex(TEX,TEX,(g,px,r)=>{px(0,0,'#43484a',TEX,TEX);for(let y=2;y<TEX;y+=6)for(let x=(y/6|0)%2?5:2;x<TEX;x+=6){px(x,y,'#5c6366',2,1);px(x,y+1,'#2e3234',2,1);}
+    px(0,0,'#2c3032',TEX,1);px(0,0,'#2c3032',1,TEX);},{seed:42});
+  // 林地地面：草地、小徑泥土、林下的苔蘚
+  T.grass=canvasTex(TEX,TEX,(g,px,r)=>{px(0,0,'#4a6634',TEX,TEX);for(let k=0;k<90;k++)px(r()*TEX,r()*TEX,pick(r,['#557540','#3f5a2c','#5e7e44','#46602f']),1,1);
+    for(let k=0;k<14;k++)px(r()*TEX|0,r()*TEX|0,'#68884a',1,2);},{seed:31});
+  T.dirt=canvasTex(TEX,TEX,(g,px,r)=>{px(0,0,'#6a5236',TEX,TEX);for(let k=0;k<80;k++)px(r()*TEX,r()*TEX,pick(r,['#5e4830','#7a6040','#584430']),1,1);
+    for(let k=0;k<6;k++)px(r()*TEX,r()*TEX,'#8a8070',2,1);},{seed:32});
+  T.moss=canvasTex(TEX,TEX,(g,px,r)=>{px(0,0,'#2c3c24',TEX,TEX);for(let k=0;k<70;k++)px(r()*TEX,r()*TEX,pick(r,['#33462a','#26341f','#3a4c2c']),1,1);},{seed:33});
   T.glow=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');const gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.35,'rgba(255,255,255,.35)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;})();
   T.shaft=(()=>{const c=document.createElement('canvas');c.width=16;c.height=64;const g=c.getContext('2d');const gr=g.createLinearGradient(0,0,0,64);gr.addColorStop(0,'rgba(255,255,255,.9)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,16,64);const e=g.createLinearGradient(0,0,16,0);e.addColorStop(0,'rgba(0,0,0,1)');e.addColorStop(.25,'rgba(0,0,0,0)');e.addColorStop(.75,'rgba(0,0,0,0)');e.addColorStop(1,'rgba(0,0,0,1)');g.globalCompositeOperation='destination-out';g.fillStyle=e;g.fillRect(0,0,16,64);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;})();
 }
@@ -196,9 +207,9 @@ function build(){
   map=generateMap();
   document.getElementById('seedLabel').textContent='種子 '+map.seed;
   // 地圖外的暗色底面
-  const voidPlane=mesh(new THREE.PlaneGeometry(200,200),plain(state.type==='london'?0x1c1f1d:0x120e0b),{cast:false});
+  const voidPlane=mesh(new THREE.PlaneGeometry(200,200),plain(state.type==='london'?0x1c1f1d:state.type==='woodland'?0x10150e:0x120e0b),{cast:false});
   voidPlane.rotation.x=-Math.PI/2;voidPlane.position.set(map.cols/2,-.3,map.rows/2);world.add(voidPlane);
-  if(state.type==='london')buildLondon();else buildResidence();
+  if(state.type==='london')buildLondon();else if(state.type==='woodland')buildWoodland();else buildResidence();
   mergeStatic();buildLights();buildActors();
   applyTime();
 }
@@ -215,14 +226,141 @@ function floorTiles(cells,material,y=0,thick=0){
   world.add(inst);
 }
 
+/* ---------- 林地：樹木、岩石等用 Kenney Nature Kit（CC0），顏色在這裡重上 ---------- */
+const WOOD={ready:false,src:{},geo:{}};
+// 原作是鮮豔的卡通色；改成偏暗、偏灰的配色
+const WOOD_PALETTE={leafsGreen:'#56743a',leafsDark:'#33523a',woodBark:'#5a3f2e',woodBarkDark:'#443228',woodInner:'#c0a074',grass:'#52723c',dirt:'#665036',
+  stone:'#86847a',colorRed:'#a03838',colorYellow:'#d0a840',colorPurple:'#74589a',colorTan:'#c4a678',_defaultMat:'#ddd4c2'};
+const WOOD_MAT=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.92,flatShading:true});
+/* 像素紋理：依世界座標投影（每格 32 像素，同地板與牆面），疊在頂點色上。
+   原模型是平塗色塊，加上這層後樹葉、樹皮、岩石才有像素點的質感，和其他場景一致。 */
+const WOOD_NOISE=(()=>{const N=32,c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d'),r=makeRng(4242);
+  g.fillStyle='rgb(190,190,190)';g.fillRect(0,0,N,N);
+  const dot=(x,y,v,w=1,h=1)=>{g.fillStyle=`rgb(${v},${v},${v})`;g.fillRect(((x%N)+N)%N,((y%N)+N)%N,w,h);};
+  for(let k=0;k<70;k++){const x=r()*N|0,y=r()*N|0;dot(x,y,150);dot(x+1,y,165);dot(x,y+1,170);}   // 暗色小葉叢
+  for(let k=0;k<60;k++){const x=r()*N|0,y=r()*N|0;dot(x,y,228);dot(x+1,y+1,212);}              // 亮點
+  for(let k=0;k<120;k++)dot(r()*N|0,r()*N|0,175+(r()*30|0));
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.magFilter=THREE.NearestFilter;t.minFilter=THREE.NearestMipmapLinearFilter;t.colorSpace=THREE.NoColorSpace;return t;})();
+WOOD_MAT.onBeforeCompile=sh=>{
+  sh.uniforms.uNoise={value:WOOD_NOISE};
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWPos;')
+    .replace('#include <project_vertex>',`#include <project_vertex>
+    { vec4 wp=vec4(transformed,1.0);
+      #ifdef USE_INSTANCING
+        wp=instanceMatrix*wp;
+      #endif
+      vWPos=(modelMatrix*wp).xyz; }`);
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nuniform sampler2D uNoise;\nvarying vec3 vWPos;')
+    .replace('#include <color_fragment>',`#include <color_fragment>
+    { vec3 n=abs(normalize(cross(dFdx(vWPos),dFdy(vWPos))));
+      vec2 uv=n.y>n.x&&n.y>n.z?vWPos.xz:n.x>n.z?vWPos.zy:vWPos.xy;
+      diffuseColor.rgb*=texture2D(uNoise,uv).r*1.32; }`);
+};
+// 每種地圖物件用哪些模型；h＝高度範圍（格），fit＝占地內的比例；over＝換色（樺樹白皮、柳樹黃綠）
+const WOOD_KINDS={
+  'w-oak':{v:['tree_oak','tree_default','tree_detailed'],h:[3.0,3.6]},
+  'w-willow':{v:['tree_fat','tree_plateau'],h:[2.6,3.0],over:{leafsGreen:'#78884a'}},
+  'w-pine':{v:['tree_pineDefaultA','tree_pineDefaultB','tree_pineRoundA','tree_pineRoundC','tree_pineTallA'],h:[3.2,4.0]},
+  'w-birch':{v:['tree_thin','tree_simple','tree_tall'],h:[3.0,3.6],over:{woodBark:'#d4cfc0',leafsGreen:'#72904a'}},
+  'w-bush':{v:['plant_bush','plant_bushLarge','plant_bushDetailed'],h:[.6,.8]},
+  'w-rock':{v:['rock_largeA','rock_largeB','rock_tallA','rock_tallB','stone_tallA'],fit:.95},
+  'w-log':{v:['log_large','log_stack'],fixedRot:true},
+  'w-stump':{v:['stump_old','stump_round','stump_oldTall'],fit:.8},
+  'w-fern':{v:['plant_flatTall','plant_flatShort','grass_large'],fit:.9},
+};
+const WOOD_TALL=new Set(['w-oak','w-willow','w-pine','w-birch']);
+function loadWoodland(){
+  return gltfLoader.loadAsync('assets/woodland-kit.glb').then(g=>{for(const c of g.scene.children)WOOD.src[c.name]=c;WOOD.ready=true;})
+    .catch(e=>console.warn('林地模型載入失敗',e));
+}
+/* 一個模型的幾何：各材質合併成一塊，顏色寫在頂點上；每個三角形明暗略有差異，像手繪的色塊 */
+function woodGeo(name,over={}){
+  const key=name+JSON.stringify(over);if(WOOD.geo[key])return WOOD.geo[key];
+  const root=WOOD.src[name];if(!root)return null;root.updateMatrixWorld(true);
+  const inv=root.matrixWorld.clone().invert(),rel=new THREE.Matrix4(),parts=[];
+  let seed=7;for(const ch of name)seed=(seed*31+ch.charCodeAt(0))>>>0;const rnd=makeRng(seed);
+  root.traverse(o=>{if(!o.isMesh)return;
+    const base=o.material.name.replace(/\.\d+$/,''),c=new THREE.Color(over[base]||WOOD_PALETTE[base]||'#888888');
+    const src=o.geometry.index?o.geometry.toNonIndexed():o.geometry,p=new THREE.BufferGeometry();
+    p.setAttribute('position',src.attributes.position.clone());p.applyMatrix4(rel.multiplyMatrices(inv,o.matrixWorld));
+    const n=p.attributes.position.count,a=new Float32Array(n*3);
+    for(let i=0;i<n;i+=3){const k=.88+rnd()*.2;for(let j=0;j<3&&i+j<n;j++){a[(i+j)*3]=c.r*k;a[(i+j)*3+1]=c.g*k;a[(i+j)*3+2]=c.b*k;}}
+    p.setAttribute('color',new THREE.BufferAttribute(a,3));parts.push(p);});
+  const geo=mergeGeometries(parts,false);geo.computeVertexNormals();geo.computeBoundingBox();
+  return WOOD.geo[key]=geo;
+}
+/* 模型擺進格子：讓模型底面中心對準 (x,z) 的位置 */
+function woodPlace(geo,x,z,s,rot){
+  const b=geo.boundingBox,cx=(b.min.x+b.max.x)/2*s,cz=(b.min.z+b.max.z)/2*s,c=Math.cos(rot),n=Math.sin(rot);
+  return new THREE.Vector3(x-(c*cx+n*cz),0,z-(-n*cx+c*cz));
+}
+function woodObject(o){
+  const k=WOOD_KINDS[o.key];if(!k||!WOOD.ready)return false;
+  const r=makeRng(((o.seed??0)^(o.x*73856093)^(o.y*19349663))>>>0);
+  const geo=woodGeo(pick(r,k.v),k.over);if(!geo)return false;
+  const b=geo.boundingBox,bx=b.max.x-b.min.x,by=b.max.y-b.min.y,bz=b.max.z-b.min.z;
+  const s=k.h?(k.h[0]+r()*(k.h[1]-k.h[0]))/by:k.fixedRot?Math.min(o.cols*.9/bx,o.rows*.9/bz):k.fit*Math.min(o.cols,o.rows)/Math.max(bx,bz);
+  const rot=k.fixedRot?(r()<.5?0:Math.PI):r()*Math.PI*2;
+  const g=new THREE.Group();world.add(g);
+  const m=mesh(geo,WOOD_MAT);m.position.copy(woodPlace(geo,o.x+o.cols/2,o.y+o.rows/2,s,rot));m.rotation.y=rot;m.scale.setScalar(s);g.add(m);
+  if(WOOD_TALL.has(o.key)){g.userData.parts=[m];fadeables.push(m);}   // 高的樹擋住人物時變半透明
+  return true;
+}
+/* 同一種模型大量擺放（林緣的樹、地上的草花）：一種模型一次畫完 */
+function woodInstances(list,cast){
+  const by=new Map();for(const it of list){if(!it.geo)continue;if(!by.has(it.geo))by.set(it.geo,[]);by.get(it.geo).push(it);}
+  const M=new THREE.Matrix4(),Q=new THREE.Quaternion(),Y=new THREE.Vector3(0,1,0),S=new THREE.Vector3();
+  for(const[geo,items]of by){const inst=new THREE.InstancedMesh(geo,WOOD_MAT,items.length);inst.castShadow=cast;inst.receiveShadow=true;
+    items.forEach((it,i)=>{Q.setFromAxisAngle(Y,it.rot);S.setScalar(it.s);M.compose(woodPlace(geo,it.x,it.z,it.s,it.rot),Q,S);inst.setMatrixAt(i,M);});
+    inst.computeBoundingSphere();world.add(inst);}
+}
+/* 林緣：地面外圍三格內種樹。樹會往北遮住後方，所以北側三格內有地面的位置只放矮灌木與岩石 */
+function woodBorder(){
+  const r=makeRng(map.seed^0xb0d),near=[],items=[];
+  const dist=(x,y)=>{let d=9;for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++)if(isActive(x+dx,y+dy))d=Math.min(d,Math.max(Math.abs(dx),Math.abs(dy)));return d;};
+  const tall=['tree_pineDefaultA','tree_pineDefaultB','tree_pineRoundA','tree_pineRoundC','tree_pineTallA','tree_oak','tree_default','tree_detailed'];
+  const low=['plant_bush','plant_bushLarge','plant_bushDetailed','rock_largeA','rock_largeB'];
+  for(let y=-3;y<map.rows+3;y++)for(let x=-3;x<map.cols+3;x++){
+    if(isActive(x,y))continue;const d=dist(x,y);if(d>3)continue;near.push({x,y});
+    const hides=isActive(x,y-1)||isActive(x,y-2)||isActive(x,y-3);
+    const jx=x+.5+(r()-.5)*.5,jz=y+.5+(r()-.5)*.5;
+    if(hides){
+      if(r()<.6){const name=pick(r,low),geo=woodGeo(name),b=geo.boundingBox,rock=name.startsWith('rock');
+        items.push({geo,x:jx,z:jz,rot:r()*6.28,s:rock?.6/(b.max.x-b.min.x):(.42+r()*.16)/(b.max.y-b.min.y)});}
+    }else if(r()<(d===1?.7:.9)){const name=pick(r,tall),geo=woodGeo(name),b=geo.boundingBox;
+      items.push({geo,x:jx,z:jz,rot:r()*6.28,s:(3+r()*1.2)/(b.max.y-b.min.y)});}
+  }
+  floorTiles(near,mat('moss',{roughness:1}));
+  woodInstances(items,true);
+}
+/* 地上的草叢、野花、蘑菇：不占格、很矮，只放在空地（不放在小徑與物件上） */
+function woodDecor(){
+  const r=makeRng(map.seed^0xdec),items=[],names=['grass','grass','grass_large','plant_flatShort','flower_redA','flower_yellowA','flower_purpleA','mushroom_redGroup','mushroom_tanGroup'];
+  for(const c of map.cells){if(!c.active||c.core||c.blocked||r()>.45)continue;
+    const name=pick(r,names),geo=woodGeo(name),b=geo.boundingBox;
+    items.push({geo,x:c.x+.2+r()*.6,z:c.y+.2+r()*.6,rot:r()*6.28,s:(name.startsWith('grass')?.45:.32)/Math.max(.1,b.max.y-b.min.y)});}
+  woodInstances(items,false);
+}
+function buildWoodland(){
+  const act=map.cells.filter(c=>c.active);
+  floorTiles(act.filter(c=>c.core),mat('dirt',{roughness:1}));
+  floorTiles(act.filter(c=>!c.core),mat('grass',{roughness:1}));
+  if(!WOOD.ready){for(const o of map.objects)furniture(o,makeRng(1));return;}
+  woodBorder();
+  for(const o of map.objects)if(!woodObject(o))furniture(o,makeRng(1));
+  woodDecor();
+}
+
 /* ---------- 住宅 ---------- */
 function buildResidence(){
   const r=makeRng(map.seed^0x51);
-  const floorKeys=['parquet','planks','checker','parquet','planks'];
+  const factory=map.locationType==='factory';
+  const floorKeys=factory?['concrete','treadplate','planks','concrete','treadplate']:['parquet','planks','checker','parquet','planks'];
   const roomOf=c=>map.rooms.findIndex(o=>c.x>=o.x&&c.x<o.x+o.w&&c.y>=o.y&&c.y<o.y+o.h);
   const groups=new Map();
   for(const c of map.cells){if(!c.active)continue;const ri=roomOf(c),key=ri<0?'hall':floorKeys[(ri+map.seed)%floorKeys.length];if(!groups.has(key))groups.set(key,[]);groups.get(key).push(c);}
-  for(const[key,cells]of groups)floorTiles(cells,key==='hall'?mat('planks',{color:0xb0a090}):mat(key,{roughness:key==='checker'?.45:.8}));
+  for(const[key,cells]of groups)floorTiles(cells,key==='hall'?(factory?mat('concrete',{color:0x9a968c}):mat('planks',{color:0xb0a090})):mat(key,{roughness:key==='checker'?.45:.8}));
+  if(factory){buildWalls(r);for(const o of map.objects)furniture(o,r);return;}   // 工廠：沒有地毯
   // 走廊地毯
   for(const c of groups.get('hall')||[]){const m=mesh(new THREE.PlaneGeometry(.56,1),plain(0x6e3a32,{roughness:1}),{cast:false});m.rotation.x=-Math.PI/2;m.position.set(c.x+.5,.006,c.y+.5);world.add(m);}
   // 房間地毯
@@ -245,8 +383,9 @@ function buildResidence(){
 }
 
 function buildWalls(r){
-  const papers=['wallpaper','wallpaper2'];
+  const factory=map.locationType==='factory',papers=factory?['brick','brick']:['wallpaper','wallpaper2'];
   const wallMats=papers.map(p=>[plain(0x2a2018),plain(0x2a2018),plain(0x17110c,{roughness:1}),plain(0x2a2018),mat(p),plain(0x2a2018)]);
+  const lowMat=factory?mat('treadplate',{color:0xb8b8b8}):mat('wainscot');   // 牆腳：工廠用鐵板，住宅用護牆板
   const T_=.22;
   // 北牆：沿每一列合併成連續一段
   for(let y=0;y<map.rows;y++){let start=-1;
@@ -255,7 +394,7 @@ function buildWalls(r){
       if(!need&&start>=0){
         const len=x-start,wm=wallMats[(y+map.seed)%2];
         const w=block(world,start-T_,0,y-T_,len+T_*2,WALL_H,T_,wm);
-        block(world,start,0,y-.02,len,.85,.06,[plain(0x2a1a10),plain(0x2a1a10),plain(0x6e4a2e),plain(0x2a1a10),mat('wainscot'),plain(0x2a1a10)]);
+        block(world,start,0,y-.02,len,.85,.06,[plain(0x2a1a10),plain(0x2a1a10),plain(0x6e4a2e),plain(0x2a1a10),lowMat,plain(0x2a1a10)]);
         block(world,start,WALL_H-.12,y-.02,len,.1,.08,plain(0x4a3020));
         // 窗戶：每段牆隨機開 1–2 扇
         const n=len>=4?1+(r()<.5?1:0):len>=2?1:0,used=new Set();
@@ -318,6 +457,22 @@ function addPoint(x,y,z,color,intensity,distance,emissiveMat,{flick=.0,dayFactor
 // 模型用 Draco 壓縮；解壓程式從 CDN 載入一次，所有模型共用
 const gltfLoader=new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/'));
 const FIREPLACE={scene:null};
+/* 工廠機具（Blender，assets/factory-kit.glb）：每個物件名稱就是地圖物件的 key（m-furnace 等） */
+const FACTORY={models:{},embers:null};
+function loadFactory(){
+  const ao=new THREE.TextureLoader().load('assets/factory-kit-ao.webp');ao.flipY=false;ao.channel=1;ao.colorSpace=THREE.NoColorSpace;
+  return gltfLoader.loadAsync('assets/factory-kit.glb').then(g=>{
+    g.scene.traverse(o=>{
+      if(!o.isMesh)return;const m=o.material;
+      if(m.map){m.map.magFilter=THREE.NearestFilter;m.map.minFilter=THREE.NearestMipmapLinearFilter;m.map.anisotropy=4;}
+      m.aoMap=ao;
+      if(m.name==='Embers'){m.emissive.set(0xff8a30);m.emissiveMap=m.map;m.emissiveIntensity=3;FACTORY.embers=m;}
+      else if(m.name==='Gauge'){m.emissive.set(0xffffff);m.emissiveMap=m.map;m.emissiveIntensity=.25;}
+      else{m.emissive.set(0);m.emissiveIntensity=0;}
+    });
+    for(const c of g.scene.children)FACTORY.models[c.name]=c;
+  }).catch(e=>console.warn('工廠模型載入失敗',e));
+}
 function loadFireplace(){
   // 預先算好的凹處陰影，貼在模型的第二組 UV 上（glTF 的 UV 不需上下翻轉）
   const ao=new THREE.TextureLoader().load('assets/fireplace-ao.webp');ao.flipY=false;ao.channel=1;ao.colorSpace=THREE.NoColorSpace;
@@ -457,6 +612,12 @@ function furniture(o,r){
   const S=o.key.startsWith('f-')?FURN_SCALE:1,ox=o.cols/2*(1-S);
   if(S!==1){g.scale.setScalar(S);g.position.x+=ox;}
   const AP=(lx,ly,lz,...a)=>addPoint(o.x+ox+lx*S,ly*S,o.y+lz*S,...a);
+  // 工廠機具：Blender 模型已按格子尺寸做好，直接放進占地（熔爐另加火焰與光源）
+  if(o.key.startsWith('m-')&&state.detail&&FACTORY.models[o.key]){
+    const m=FACTORY.models[o.key].clone(true);m.traverse(c=>{if(c.isMesh)c.castShadow=c.receiveShadow=true;});g.add(m);
+    if(o.key==='m-furnace'){addFlames(g,1,.28,.9);addHalo(g,1,.5,.95,1.4,0xff8030);AP(1,.6,1.5,0xff7a30,6,6,FACTORY.embers,{flick:.25,dayFactor:.6});}
+    return;
+  }
   const W=o.cols,D=o.rows,brass=plain(0xc9a14a,{metalness:.7,roughness:.35}),dark=plain(0x2a1a10);
   const legs=(x0,z0,w,d,h,m=dark)=>{for(const[a,b]of[[x0,z0],[x0+w-.06,z0],[x0,z0+d-.06],[x0+w-.06,z0+d-.06]])block(g,a,0,b,.06,h,.06,m);};
   const front=(m,frontMat)=>[m,m,m,m,frontMat,m];
@@ -600,9 +761,14 @@ function building(o){
   if(useKit){ground=kitFacade(g,o,W,D,FH,GH,style,rk,kitParts);parts.push(...mergeInto(g,kitParts));}
   // 店面遮陽篷（模組版只放在商店）
   // 模組版：裝在招牌上方、只伸出約 0.35 格，從鏡頭看整片在人物頭頂之上（人物 1.2 格）
-  if(o.face==='front'&&(useKit?ground==='shop'&&rr()<.35:rr()<.45)){const aw=canvasTex(16,8,(gg,px)=>{for(let x=0;x<16;x+=4)px(x,0,'#7a2630',2,8),px(x+2,0,'#e8dcc0',2,8);},{seed:o.seed});
-    const a=mesh(new THREE.BoxGeometry(W-.2,.05,useKit?.36:.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));
-    if(useKit){a.position.set(W/2,1.47,D+.18);a.rotation.x=.3;}else{a.position.set(W/2,.95,D+.3);a.rotation.x=.35;}g.add(a);parts.push(a);}
+  // 側街（正面朝東或朝西）的商店也加：同一片遮陽篷轉 90 度貼在側面
+  const side=o.face==='side';
+  if((o.face==='front'||useKit&&side)&&(useKit?ground==='shop'&&rr()<(side?.5:.35):rr()<.45)){const aw=canvasTex(16,8,(gg,px)=>{for(let x=0;x<16;x+=4)px(x,0,'#7a2630',2,8),px(x+2,0,'#e8dcc0',2,8);},{seed:o.seed});
+    const a=mesh(new THREE.BoxGeometry((side?D:W)-.2,.05,useKit?.36:.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));
+    if(useKit){const pv=new THREE.Group(),east=o.street==='east';
+      if(side){pv.position.set(east?W:0,0,D/2);pv.rotation.y=east?Math.PI/2:-Math.PI/2;}else pv.position.set(W/2,0,D);
+      a.position.set(0,1.47,.18);a.rotation.x=.3;pv.add(a);g.add(pv);}
+    else{a.position.set(W/2,.95,D+.3);a.rotation.x=.35;g.add(a);}parts.push(a);}
   for(const p of parts){fadeables.push(p);}
   g.userData.parts=parts;
 }
@@ -622,7 +788,7 @@ function mergeStatic(){
     for(const gr of groups){
       const m=mats[gr.materialIndex];if(!m)continue;
       const piece=new THREE.BufferGeometry(),end=Math.min(total,gr.start+gr.count);
-      for(const name of ['position','normal','uv']){const a=flat.attributes[name];piece.setAttribute(name,new THREE.BufferAttribute(a.array.slice(gr.start*a.itemSize,end*a.itemSize),a.itemSize));}
+      for(const name of ['position','normal','uv','uv1','color']){const a=flat.attributes[name];if(!a)continue;piece.setAttribute(name,new THREE.BufferAttribute(a.array.slice(gr.start*a.itemSize,end*a.itemSize),a.itemSize));}
       piece.applyMatrix4(o.matrixWorld);
       const key=m.uuid+'|'+o.castShadow+'|'+o.receiveShadow;
       if(!buckets.has(key))buckets.set(key,{m,cast:o.castShadow,recv:o.receiveShadow,list:[]});
@@ -867,7 +1033,7 @@ function updateActorShadows(){
 /* 地面高度：街區的人行道（非車道）比路面高 0.1 格 */
 let groundCells=null;
 function groundAt(x,z){
-  if(map.indoor)return 0;
+  if(map.indoor||map.locationType!=='london')return 0;
   if(!groundCells||groundCells.map!==map){groundCells=new Map(map.cells.map(c=>[c.x+','+c.y,c]));groundCells.map=map;}
   const c=groundCells.get(Math.floor(x)+','+Math.floor(z));
   return c&&c.active&&!c.core?.1:0;
@@ -878,6 +1044,14 @@ function goFireplace(){
   if(state.type==='london'){
     o=map.objects.filter(b=>b.key==='building'&&b.face==='front').sort((a,b)=>b.floors*b.cols-a.floors*a.cols)[0];
     if(!o){alert('這張地圖沒有正面朝南的街屋，請按「換一張」。');return false;}
+    tx=o.x+o.cols/2;ty=o.y+o.rows+1;
+  }else if(state.type==='woodland'){
+    o=map.objects.filter(b=>WOOD_TALL.has(b.key)).sort((a,b)=>b.cols-a.cols)[0];
+    if(!o){alert('這張地圖沒有大樹，請按「換一張」。');return false;}
+    tx=o.x+o.cols/2;ty=o.y+o.rows+1;
+  }else if(state.type==='factory'){
+    o=map.objects.find(o=>o.key==='m-furnace')||map.objects.find(o=>o.key==='m-boiler');
+    if(!o){alert('這張地圖沒有熔爐或鍋爐，請按「換一張」。');return false;}
     tx=o.x+o.cols/2;ty=o.y+o.rows+1;
   }else{
     o=map.objects.find(o=>o.key==='f-fireplace');if(!o){alert('這張地圖沒有壁爐，請按「換一張」。');return false;}
@@ -899,7 +1073,7 @@ if(params.get('detail')==='0'){state.detail=false;document.getElementById('detai
 if(params.get('near')==='1'){state.near=true;document.getElementById('zoom').classList.add('on');}
 addEventListener('resize',()=>{resize();placeCamera(true);});
 resize();
-Promise.all([loadFireplace(),loadKit()]).finally(()=>{rebuild();if(params.get('fire')==='1')goFireplace();tick();});
+Promise.all([loadFireplace(),loadKit(),loadWoodland(),loadFactory()]).finally(()=>{rebuild();if(params.get('fire')==='1')goFireplace();tick();});
 setTimeout(()=>document.getElementById('hint').remove(),6000);
 // 測試用：把主角移到指定格子（隊友站在旁邊）
 function teleport(id){const c=cellCenter(id);actors.cell=id;actors.path=[];actors.player.g.position.set(c.x,0,c.z);
