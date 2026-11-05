@@ -314,10 +314,10 @@ function woodInstances(list,cast){
     items.forEach((it,i)=>{Q.setFromAxisAngle(Y,it.rot);S.setScalar(it.s);M.compose(woodPlace(geo,it.x,it.z,it.s,it.rot),Q,S);inst.setMatrixAt(i,M);});
     inst.computeBoundingSphere();world.add(inst);}
 }
-/* 林緣：地面外圍三格內種樹。樹會往北遮住後方，所以北側三格內有地面的位置只放矮灌木與岩石 */
 /* 林地地面：小徑泥土、草地、林下苔蘚畫在同一片上。
    每格記一個點（泥土／苔蘚／有無地面），格與格之間平滑內插，再加上大小兩層雜訊決定分界，
-   所以邊界是彎曲、參差的；判斷以 1/32 格為單位，邊緣仍是像素格。 */
+   所以邊界是彎曲、參差的；判斷以 1/32 格為單位，邊緣仍是像素格。
+   泥土畫得比小徑格子窄，寬度沿路慢慢變化（約 0.5～0.9 格），兩旁露出草地；可走範圍不變。 */
 function woodGround(){
   const P=3,W=map.cols+P*2,H=map.rows+P*2,data=new Uint8Array(W*H*4);
   const core=(x,y)=>isActive(x,y)&&map.cells[y*map.cols+x].core;
@@ -338,17 +338,22 @@ function woodGround(){
       .replace('#include <map_fragment>',`
       vec2 q=(floor(vWPos.xz*32.)+.5)/32.;
       vec4 mk=texture2D(uMask,(q+${P}.)/vec2(${W}.,${H}.));
-      float k=(texture2D(uSmooth,q*.3).r-.5)*.5+(texture2D(uSmooth,q*1.1).r-.5)*.22+(texture2D(uFine,q*.5).r-.5)*.22;
+      float k=(texture2D(uSmooth,q*.012).r-.5)*.3+(texture2D(uSmooth,q*.05).r-.5)*.2+(texture2D(uFine,q*.5).r-.5)*.22;
+      float thr=.54+texture2D(uSmooth,q*.006+.37).r*.2;   // 小徑寬度：值越大泥土越窄
       if(mk.a+k<.5)discard;
-      float d=mk.r+k,mo=mk.g+k*.9;
+      // 寬闊的泥土區（上下左右一格內都是小徑）裡長出幾塊草地；一兩格寬的小徑不會被截斷
+      vec2 cu=(q+${P}.)/vec2(${W}.,${H}.),ox=vec2(1./${W}.,0.),oy=vec2(0.,1./${H}.);
+      float inner=min(min(texture2D(uMask,cu+ox).r,texture2D(uMask,cu-ox).r),min(texture2D(uMask,cu+oy).r,texture2D(uMask,cu-oy).r));
+      float d=mk.r+k-inner*smoothstep(.5,.72,texture2D(uSmooth,q*.02+.61).r)*.65,mo=mk.g+k*.9;
       vec4 col=mo>.5?texture2D(uMoss,vWPos.xz):texture2D(uGrass,vWPos.xz);
-      if(d>.5)col=texture2D(uDirt,vWPos.xz)*(d<.56?.82:1.);   // 泥土邊緣稍暗，像被踩實的土
-      else if(d>.42)col.rgb*=.9;                              // 小徑旁的草較稀、偏暗
+      if(d>thr)col=texture2D(uDirt,vWPos.xz)*(d<thr+.06?.82:1.);   // 泥土邊緣稍暗，像被踩實的土
+      else if(d>thr-.1)col.rgb*=.9;                                 // 小徑旁的草較稀、偏暗
       diffuseColor*=col;`);
   };
   const g=new THREE.PlaneGeometry(W,H);g.rotateX(-Math.PI/2);
   const plane=mesh(g,m,{cast:false});plane.position.set(map.cols/2,0,map.rows/2);plane.receiveShadow=true;world.add(plane);
 }
+/* 林緣：地面外圍三格內種樹。樹會往北遮住後方，所以北側三格內有地面的位置只放矮灌木與岩石 */
 function woodBorder(){
   const r=makeRng(map.seed^0xb0d),near=[],items=[];
   const dist=(x,y)=>{let d=9;for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++)if(isActive(x+dx,y+dy))d=Math.min(d,Math.max(Math.abs(dx),Math.abs(dy)));return d;};
@@ -372,6 +377,14 @@ function woodDecor(){
   for(const c of map.cells){if(!c.active||c.core||c.blocked||r()>.45)continue;
     const name=pick(r,names),geo=woodGeo(name),b=geo.boundingBox;
     items.push({geo,x:c.x+.2+r()*.6,z:c.y+.2+r()*.6,rot:r()*6.28,s:(name.startsWith('grass')?.45:.32)/Math.max(.1,b.max.y-b.min.y)});}
+  // 小徑邊緣：草叢長在泥土與草地交界外側，碎石散在泥土邊上（只放在旁邊是草地的那一側）
+  const core=(x,y)=>isActive(x,y)&&map.cells[y*map.cols+x].core,edge=['grass','grass','grass_large','plant_flatShort'],stones=['rock_largeA','rock_largeB','stone_largeA'];
+  for(const c of map.cells){if(!c.core||c.blocked)continue;
+    for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){if(!isActive(c.x+dx,c.y+dy)||core(c.x+dx,c.y+dy))continue;
+      for(let k=0;k<2;k++){if(r()>.55)continue;const along=(r()-.5)*.8,out=.42+r()*.16,x=c.x+.5+dx*out+dy*along,z=c.y+.5+dy*out+dx*along;
+        const name=pick(r,edge),geo=woodGeo(name),b=geo.boundingBox;items.push({geo,x,z,rot:r()*6.28,s:(.22+r()*.12)/Math.max(.1,b.max.y-b.min.y)});}
+      if(r()<.35){const along=(r()-.5)*.8,out=.2+r()*.14,name=pick(r,stones),geo=woodGeo(name),b=geo.boundingBox;
+        items.push({geo,x:c.x+.5+dx*out+dy*along,z:c.y+.5+dy*out+dx*along,rot:r()*6.28,s:(.07+r()*.06)/Math.max(.1,b.max.x-b.min.x)});}}}
   woodInstances(items,false);
 }
 function buildWoodland(){
