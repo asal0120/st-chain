@@ -373,16 +373,16 @@ function kitPut(g,list,key,x,y,z,style,paint,rr,rotY=0){
     o.material=n==='Brick'?kitStyleMat(style):n==='Paint'?kitPaintMat(paint):n==='Glass'?(lit?KIT.glassLit:KIT.mats.Glass):o.material;});
   return m;
 }
-function kitFacade(g,o,W,D,FH,style,rr,list){
+function kitFacade(g,o,W,D,FH,GH,style,rr,list){
   const paint=pick(rr,KIT_PAINT),r=rr(),ground=r<.5?'shop':r<.82?'door':'pub';
   const upper=pick(rr,['U_SASH','U_SASH','U_ARCH','U_BOX']),bay=o.floors>=2&&rr()<.5,doorCol=Math.min(W-1,Math.floor(W/2));
   for(let f=0;f<o.floors;f++)for(let c=0;c<W;c++){
-    const key=f===0?(ground==='shop'?(c===doorCol?'G_SHOPDOOR':'G_SHOP'):ground==='pub'?'G_PUB':(c===doorCol?'G_DOOR':'U_SASH'))
+    const key=f===0?(ground==='shop'?(c===doorCol?'G_SHOPDOOR':'G_SHOP'):ground==='pub'?'G_PUB':(c===doorCol?'G_DOOR':'G_SASH'))
       :(bay&&f===1&&c===doorCol?'U_BAY':upper==='U_BOX'&&f>1?'U_SASH':upper);
-    kitPut(g,list,key,c,f*FH,D,style,paint,rr);
+    kitPut(g,list,key,c,f===0?0:GH+(f-1)*FH,D,style,paint,rr);
   }
-  for(let c=0;c<W;c++)kitPut(g,list,'CORNICE',c,o.floors*FH,D,style,paint,rr);
-  if(ground==='pub'){kitPut(g,list,'LAMP_BRACKET',doorCol,0,D,style,paint,rr);addPoint(o.x+doorCol+.5,.86,o.y+D+.26,0xffb860,6,5,KIT.lamp,{dayFactor:0});}
+  for(let c=0;c<W;c++)kitPut(g,list,'CORNICE',c,GH+(o.floors-1)*FH,D,style,paint,rr);
+  if(ground==='pub'){kitPut(g,list,'LAMP_BRACKET',doorCol,0,D,style,paint,rr);addPoint(o.x+doorCol+.5,1.22,o.y+D+.36,0xffb860,6,5,KIT.lamp,{dayFactor:0});}
   return ground;
 }
 /* 一棟建物的模組依材質合併（每種材質一塊），減少繪製次數 */
@@ -523,9 +523,10 @@ function facadeTex(o,cols,floors,kind){
 }
 function building(o){
   const g=new THREE.Group();g.position.set(o.x,0,o.y);world.add(g);
-  const FH=1.125,H=o.floors*FH+.2,W=o.cols,D=o.rows;
   // 精細素材：正面朝南的一般建物改用 Blender 模組；側面、背面與地標維持程式繪製
   const useKit=state.detail&&KIT.ready&&o.key==='building'&&o.face==='front';
+  // 模組的一樓（店面、大門）較高：1.5 格，人物約 1.2 格；樓上每層 1.125 格
+  const FH=1.125,GH=useKit?1.5:FH,H=GH+(o.floors-1)*FH+.2,W=o.cols,D=o.rows;
   const rk=makeRng(o.seed^0x5151),style=useKit?pick(rk,KIT_STYLES):null,kitParts=[];
   const visibleCols=o.face==='side'?D:W;
   const {tex,em,base}=facadeTex(o,visibleCols,o.floors,o.face);
@@ -563,10 +564,10 @@ function building(o){
     lights.windows.push({facade:clock});
     const sp=mesh(new THREE.ConeGeometry(tw*.75,2.2,4),roofMat);sp.rotation.y=Math.PI/4;sp.position.set(W/2,H+3.5,D/2);g.add(sp);parts.push(sp);}
   let ground=null;
-  if(useKit){ground=kitFacade(g,o,W,D,FH,style,rk,kitParts);parts.push(...mergeInto(g,kitParts));}
+  if(useKit){ground=kitFacade(g,o,W,D,FH,GH,style,rk,kitParts);parts.push(...mergeInto(g,kitParts));}
   // 店面遮陽篷（模組版只放在商店）
   if(o.face==='front'&&(useKit?ground==='shop'&&rr()<.35:rr()<.45)){const aw=canvasTex(16,8,(gg,px)=>{for(let x=0;x<16;x+=4)px(x,0,'#7a2630',2,8),px(x+2,0,'#e8dcc0',2,8);},{seed:o.seed});
-    const a=mesh(new THREE.BoxGeometry(W-.2,.05,.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));a.position.set(W/2,useKit?.8:.95,D+.3);a.rotation.x=.35;g.add(a);parts.push(a);}
+    const a=mesh(new THREE.BoxGeometry(W-.2,.05,.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));a.position.set(W/2,useKit?1.24:.95,D+.3);a.rotation.x=.35;g.add(a);parts.push(a);}
   for(const p of parts){fadeables.push(p);}
   g.userData.parts=parts;
 }
@@ -671,15 +672,15 @@ function makeActor(url,w,h){
   const g=new THREE.Group();
   const geo=new THREE.PlaneGeometry(w,h);geo.translate(0,h/2,0);
   const m=new THREE.Mesh(geo,spriteMat(url));m.castShadow=true;m.rotation.x=-.32;g.add(m);
-  const blob=new THREE.Mesh(new THREE.CircleGeometry(.28,16),new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:.35,depthWrite:false}));
+  const blob=new THREE.Mesh(new THREE.CircleGeometry(.23,16),new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:.35,depthWrite:false}));
   blob.rotation.x=-Math.PI/2;blob.position.y=.015;blob.scale.set(1,.6,1);g.add(blob);
   world.add(g);return {g,sprite:m,trail:[]};
 }
 function buildActors(){
-  // 主角圖 832×1216（內容寬到 767）；莉澤圖 384×768。高度約 1.55 格。
-  const player=makeActor('../../assets/actors/pixel-idle-13-54-08-v1/original.png',1.06,1.55);
-  player.sprite.geometry.translate(.06,0,0);
-  const lize=makeActor('../../assets/actors/char1-idle-v1/char1-static.png',.78,1.55);
+  // 主角圖 832×1216（內容寬到 767）；莉澤圖 384×768。高度約 1.2 格（比現行探索版的 1.1 格略大，比街屋的門略矮）。
+  const player=makeActor('../../assets/actors/pixel-idle-13-54-08-v1/original.png',.82,1.2);
+  player.sprite.geometry.translate(.046,0,0);
+  const lize=makeActor('../../assets/actors/char1-idle-v1/char1-static.png',.6,1.2);
   const s=cellCenter(map.spawn);
   actors={player,lize,cell:map.spawn,path:[],history:[]};
   const near=SceneMap.adjacent(map,map.spawn).filter(walkable),n=near.length?cellCenter(near[0]):{x:s.x,z:s.z+.6};
@@ -772,7 +773,7 @@ function tick(){
     actors.lize.sprite.position.y=d>.05?Math.abs(Math.sin(t*12+1))*.05:0;}
   // 擋在主角前面的建物變半透明
   if(fadeables.length){
-    const head=new THREE.Vector3(P.x,.9,P.z),dir=head.clone().sub(camera.position),len=dir.length();ray.set(camera.position,dir.normalize());ray.far=len-.3;
+    const head=new THREE.Vector3(P.x,.7,P.z),dir=head.clone().sub(camera.position),len=dir.length();ray.set(camera.position,dir.normalize());ray.far=len-.3;
     const hit=new Set(ray.intersectObjects(fadeables,false).map(h=>h.object.parent));
     for(const o of fadeables)o.parent.userData.fade=hit.has(o.parent)?.28:1;
     const seen=new Set();for(const o of fadeables){const g=o.parent;if(seen.has(g))continue;seen.add(g);setGroupOpacity(g,g.userData.fade??1);}
