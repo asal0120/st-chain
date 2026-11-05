@@ -39,7 +39,7 @@
       <button data-fx="bloom" class="on">泛光</button><button data-fx="tilt" class="on">移軸模糊</button>
       <button data-fx="pixel">全畫面像素化</button></div>
     <div class="row"><span>素材</span>
-      <button id="detail" class="on">精細壁爐</button><button id="gofire">看壁爐</button><button id="zoom">近看</button></div>
+      <button id="detail" class="on">精細素材</button><button id="gofire">看細節</button><button id="zoom">近看</button></div>
   </div>
 </div>
 <div id="hint">點地面移動，或用方向鍵／WASD</div>
@@ -56,6 +56,7 @@ import {HorizontalTiltShiftShader} from 'three/addons/shaders/HorizontalTiltShif
 import {VerticalTiltShiftShader} from 'three/addons/shaders/VerticalTiltShiftShader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
 
 window.addEventListener('error',e=>{document.getElementById('err').textContent+=e.message+'\n';});
 
@@ -191,6 +192,7 @@ function build(){
   if(scene)scene.traverse(o=>{if(o.geometry)o.geometry.dispose();});
   scene=new THREE.Scene();world=new THREE.Group();scene.add(world);
   lights={points:[],windows:[],shafts:[],lampHalos:[]};fadeables=[];
+  if(KIT.ready)lights.windows.push({facade:KIT.glassLit},{facade:KIT.glassWarm});
   map=generateMap();
   document.getElementById('seedLabel').textContent='種子 '+map.seed;
   // 地圖外的暗色底面
@@ -313,11 +315,13 @@ function addPoint(x,y,z,color,intensity,distance,emissiveMat,{flick=.0,dayFactor
 }
 
 /* ---------- 精細素材：Blender 輸出的壁爐 ---------- */
+// 模型用 Draco 壓縮；解壓程式從 CDN 載入一次，所有模型共用
+const gltfLoader=new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/'));
 const FIREPLACE={scene:null};
 function loadFireplace(){
   // 預先算好的凹處陰影，貼在模型的第二組 UV 上（glTF 的 UV 不需上下翻轉）
-  const ao=new THREE.TextureLoader().load('assets/fireplace-ao.png');ao.flipY=false;ao.channel=1;ao.colorSpace=THREE.NoColorSpace;
-  return new GLTFLoader().loadAsync('assets/fireplace.glb').then(g=>{
+  const ao=new THREE.TextureLoader().load('assets/fireplace-ao.webp');ao.flipY=false;ao.channel=1;ao.colorSpace=THREE.NoColorSpace;
+  return gltfLoader.loadAsync('assets/fireplace.glb').then(g=>{
     g.scene.traverse(o=>{
       if(!o.isMesh)return;const m=o.material;
       if(m.map){m.map.magFilter=THREE.NearestFilter;m.map.minFilter=THREE.NearestMipmapLinearFilter;m.map.anisotropy=4;}
@@ -330,6 +334,77 @@ function loadFireplace(){
     FIREPLACE.scene=g.scene;
   }).catch(e=>console.warn('壁爐模型載入失敗',e));
 }
+/* ---------- 精細素材：街屋模組（assets/street-kit.glb） ----------
+   每個模組一格寬、一層高。依每棟的樓層、寬度與一樓用途排起來，再依材質合併成少數幾塊。 */
+const KIT={ready:false,modules:{},mats:{},tex:{},styleMats:{},sideMats:{},paintMats:{}};
+const KIT_STYLES=['brick_red','brick_red','brick_stock','brick_soot','stucco'];
+const KIT_PAINT=['#2f4a3e','#5a1e24','#1d2a3a','#5a3a1e','#24262a','#6b5a2a','#3a2a4a'];
+function kitTexture(name){
+  if(KIT.tex[name])return KIT.tex[name];
+  const t=new THREE.TextureLoader().load('assets/street/'+name+'.png');
+  t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;t.magFilter=THREE.NearestFilter;t.minFilter=THREE.NearestMipmapLinearFilter;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=4;
+  return KIT.tex[name]=t;
+}
+function loadKit(){
+  const ao=new THREE.TextureLoader().load('assets/street-kit-ao.webp');ao.flipY=false;ao.channel=1;ao.colorSpace=THREE.NoColorSpace;
+  return gltfLoader.loadAsync('assets/street-kit.glb').then(g=>{
+    g.scene.traverse(o=>{
+      if(!o.isMesh)return;const m=o.material;
+      if(m.map){m.map.magFilter=THREE.NearestFilter;m.map.minFilter=THREE.NearestMipmapLinearFilter;m.map.anisotropy=4;}
+      m.aoMap=ao;m.emissive.set(0);m.emissiveIntensity=0;KIT.mats[m.name]=m;
+    });
+    for(const c of [...g.scene.children])KIT.modules[c.name]=c;
+    // 夜間亮燈的窗：亮、暗兩種玻璃，每個窗戶模組各自決定
+    KIT.glassLit=KIT.mats.Glass.clone();KIT.glassLit.emissive.set(0xffc878);
+    KIT.glassWarm=KIT.mats.GlassWarm;KIT.glassWarm.emissive.set(0xffa040);KIT.glassWarm.emissiveMap=KIT.glassWarm.map;
+    KIT.lamp=KIT.mats.Lamp;KIT.lamp.emissive.set(0xffc070);KIT.lamp.emissiveIntensity=4;
+    KIT.ready=true;
+  }).catch(e=>console.warn('街屋模組載入失敗',e));
+}
+function kitStyleMat(style){return KIT.styleMats[style]||(KIT.styleMats[style]=Object.assign(KIT.mats.Brick.clone(),{map:kitTexture(style)}));}
+function kitSideMat(style){return KIT.sideMats[style]||(KIT.sideMats[style]=new THREE.MeshStandardMaterial({map:kitTexture(style),roughness:.9}));}
+function kitPaintMat(color){if(!KIT.paintMats[color]){const m=KIT.mats.Paint.clone();m.color.set(color);KIT.paintMats[color]=m;}return KIT.paintMats[color];}
+/* 放一個模組：複製後換上這棟的磚、油漆顏色，玻璃隨機亮燈 */
+function kitPut(g,list,key,x,y,z,style,paint,rr,rotY=0){
+  const src=KIT.modules[key];if(!src)return null;
+  const m=src.clone(true);m.position.set(x,y,z);m.rotation.y=rotY;g.add(m);list.push(m);
+  const lit=rr()<.45;
+  m.traverse(o=>{if(!o.isMesh)return;const n=o.material.name;
+    o.material=n==='Brick'?kitStyleMat(style):n==='Paint'?kitPaintMat(paint):n==='Glass'?(lit?KIT.glassLit:KIT.mats.Glass):o.material;});
+  return m;
+}
+function kitFacade(g,o,W,D,FH,style,rr,list){
+  const paint=pick(rr,KIT_PAINT),r=rr(),ground=r<.5?'shop':r<.82?'door':'pub';
+  const upper=pick(rr,['U_SASH','U_SASH','U_ARCH','U_BOX']),bay=o.floors>=2&&rr()<.5,doorCol=Math.min(W-1,Math.floor(W/2));
+  for(let f=0;f<o.floors;f++)for(let c=0;c<W;c++){
+    const key=f===0?(ground==='shop'?(c===doorCol?'G_SHOPDOOR':'G_SHOP'):ground==='pub'?'G_PUB':(c===doorCol?'G_DOOR':'U_SASH'))
+      :(bay&&f===1&&c===doorCol?'U_BAY':upper==='U_BOX'&&f>1?'U_SASH':upper);
+    kitPut(g,list,key,c,f*FH,D,style,paint,rr);
+  }
+  for(let c=0;c<W;c++)kitPut(g,list,'CORNICE',c,o.floors*FH,D,style,paint,rr);
+  if(ground==='pub'){kitPut(g,list,'LAMP_BRACKET',doorCol,0,D,style,paint,rr);addPoint(o.x+doorCol+.5,.86,o.y+D+.26,0xffb860,6,5,KIT.lamp,{dayFactor:0});}
+  return ground;
+}
+/* 一棟建物的模組依材質合併（每種材質一塊），減少繪製次數 */
+function mergeInto(g,roots){
+  g.updateMatrixWorld(true);
+  const inv=g.matrixWorld.clone().invert(),buckets=new Map(),rel=new THREE.Matrix4();
+  for(const root of roots){
+    root.traverse(o=>{
+      if(!o.isMesh)return;
+      const src=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone(),piece=new THREE.BufferGeometry();
+      for(const n of ['position','normal','uv','uv1'])if(src.attributes[n])piece.setAttribute(n,src.attributes[n]);
+      piece.applyMatrix4(rel.multiplyMatrices(inv,o.matrixWorld));
+      if(!buckets.has(o.material.uuid))buckets.set(o.material.uuid,{m:o.material,list:[]});
+      buckets.get(o.material.uuid).list.push(piece);
+    });
+    g.remove(root);
+  }
+  const out=[];
+  for(const b of buckets.values()){const geo=mergeGeometries(b.list,false);if(!geo)continue;const m=mesh(geo,b.m);g.add(m);out.push(m);}
+  return out;
+}
+
 /* 像素火苗：4 格動畫，每片火苗各自錯開 */
 let flameTex=null;const flames=[];
 function flameSheet(){
@@ -448,7 +523,10 @@ function facadeTex(o,cols,floors,kind){
 }
 function building(o){
   const g=new THREE.Group();g.position.set(o.x,0,o.y);world.add(g);
-  const FH=1.15,H=o.floors*FH+.2,W=o.cols,D=o.rows;
+  const FH=1.125,H=o.floors*FH+.2,W=o.cols,D=o.rows;
+  // 精細素材：正面朝南的一般建物改用 Blender 模組；側面、背面與地標維持程式繪製
+  const useKit=state.detail&&KIT.ready&&o.key==='building'&&o.face==='front';
+  const rk=makeRng(o.seed^0x5151),style=useKit?pick(rk,KIT_STYLES):null,kitParts=[];
   const visibleCols=o.face==='side'?D:W;
   const {tex,em,base}=facadeTex(o,visibleCols,o.floors,o.face);
   const facadeMat=new THREE.MeshStandardMaterial({map:tex,emissiveMap:em,emissive:0xffffff,emissiveIntensity:0,roughness:.9});
@@ -458,17 +536,23 @@ function building(o){
   // 材質順序 +x,-x,+y,-y,+z,-z
   const faces=[sideTex,sideTex,plain(0x2c3236),plainMat,o.face==='front'?facadeMat:sideTex,plainMat];
   if(o.face==='side'){if(o.street==='east')faces[0]=facadeMat;else faces[1]=facadeMat;}
+  if(useKit){faces[0]=faces[1]=kitSideMat(style);faces[4]=plain(0x18130f);}
+  const bodyD=useKit?D-.06:D;   // 模組的牆板厚 0.06，嵌在本體前方
   tex.repeat.set(1/visibleCols,1/H);em.repeat.set(1/visibleCols,1/H);
-  const body=mesh(box(W,H,D),faces);body.position.set(W/2,H/2,D/2);g.add(body);
+  const body=mesh(box(W,H,bodyD),faces);body.position.set(W/2,H/2,bodyD/2);g.add(body);
   const parts=[body];
   // 屋頂
   const rr=makeRng(o.seed^7),roofKind=o.key==='landmark'?'landmark':o.face==='back'?'flat':pick(rr,['gable','gable','flat','mansard']);
   const roofMat=mat(rr()<.6?'slate':'tile');
-  if(roofKind==='gable'){const s=new THREE.Shape();s.moveTo(-.1,0);s.lineTo(D+.1,0);s.lineTo(D/2,Math.min(1.1,D*.45,.35+o.floors*.3));s.closePath();
+  if(roofKind==='gable'){const rh=Math.min(1.1,D*.45,.35+o.floors*.3),s=new THREE.Shape();s.moveTo(-.1,0);s.lineTo(D+.1,0);s.lineTo(D/2,rh);s.closePath();
     const geo=new THREE.ExtrudeGeometry(s,{depth:W+.1,bevelEnabled:false});geo.rotateY(Math.PI/2);
     const uv=geo.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i),uv.getY(i));
     const m=mesh(geo,roofMat);m.position.set(-.05,H,D);g.add(m);parts.push(m);
-    for(let k=0;k<Math.max(1,W/3|0);k++)parts.push(block(g,.4+k*2.6,H+.3,D*.25,.35,1.2,.35,mat('brick')));}
+    if(useKit){
+      // 屋脊附近的煙囪與屋頂前坡的老虎窗（模組）
+      for(let k=0;k<Math.max(1,W/3|0);k++)kitPut(g,kitParts,'CHIMNEY',.6+k*2.6,H+rh*.5-.15,D*.25,style,null,rk);
+      if(D>=2&&rk()<.7)kitPut(g,kitParts,'DORMER',W/2+(W>=3?.5:0),H-.05,D-.2,style,'#e8e2d4',rk);
+    }else for(let k=0;k<Math.max(1,W/3|0);k++)parts.push(block(g,.4+k*2.6,H+.3,D*.25,.35,1.2,.35,mat('brick')));}
   else if(roofKind==='mansard'){parts.push(block(g,.12,H,.12,W-.24,.8,D-.24,roofMat));parts.push(block(g,0,H,0,W,.06,D,plain(0x2c3236)));
     for(let k=0;k<W;k++)parts.push(block(g,k+.3,H+.15,D-.2,.4,.5,.12,plain(0xd8cfb8)));}
   else if(roofKind==='flat'){parts.push(block(g,0,H,0,W,.25,.12,plain(0x5a5a52)));parts.push(block(g,0,H,D-.12,W,.25,.12,plain(0x5a5a52)));
@@ -478,9 +562,11 @@ function building(o){
     const clock=new THREE.MeshStandardMaterial({color:0xf0e6c8,emissive:0xffe0a0,emissiveIntensity:0});const c=mesh(new THREE.CircleGeometry(.5,16),clock,{cast:false});c.position.set(W/2,H+1.6,D/2+tw/2+.01);g.add(c);
     lights.windows.push({facade:clock});
     const sp=mesh(new THREE.ConeGeometry(tw*.75,2.2,4),roofMat);sp.rotation.y=Math.PI/4;sp.position.set(W/2,H+3.5,D/2);g.add(sp);parts.push(sp);}
-  // 店面遮陽篷
-  if(o.face==='front'&&rr()<.45){const aw=canvasTex(16,8,(gg,px)=>{for(let x=0;x<16;x+=4)px(x,0,'#7a2630',2,8),px(x+2,0,'#e8dcc0',2,8);},{seed:o.seed});
-    const a=mesh(new THREE.BoxGeometry(W-.2,.05,.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));a.position.set(W/2,.95,D+.3);a.rotation.x=.35;g.add(a);parts.push(a);}
+  let ground=null;
+  if(useKit){ground=kitFacade(g,o,W,D,FH,style,rk,kitParts);parts.push(...mergeInto(g,kitParts));}
+  // 店面遮陽篷（模組版只放在商店）
+  if(o.face==='front'&&(useKit?ground==='shop'&&rr()<.35:rr()<.45)){const aw=canvasTex(16,8,(gg,px)=>{for(let x=0;x<16;x+=4)px(x,0,'#7a2630',2,8),px(x+2,0,'#e8dcc0',2,8);},{seed:o.seed});
+    const a=mesh(new THREE.BoxGeometry(W-.2,.05,.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));a.position.set(W/2,useKit?.8:.95,D+.3);a.rotation.x=.35;g.add(a);parts.push(a);}
   for(const p of parts){fadeables.push(p);}
   g.userData.parts=parts;
 }
@@ -714,10 +800,17 @@ setOn('[data-type]','type',state.type);setOn('[data-time]','time',state.time);
 document.querySelectorAll('[data-fx]').forEach(b=>b.classList.toggle('on',state.fx[b.dataset.fx]));
 
 function rebuild(){flames.length=0;build();renderer.shadowMap.needsUpdate=true;renderPass.scene=scene;pixelPass.scene=scene;applyFx();placeCamera(true);}
-/* 把主角移到第一座壁爐正前方，方便比較 */
+/* 把主角移到精細素材前面，方便比較：住宅是壁爐，倫敦是最高的一棟正面街屋 */
 function goFireplace(){
-  const o=map.objects.find(o=>o.key==='f-fireplace');if(!o){alert('這張地圖沒有壁爐，請按「換一張」。');return false;}
-  const tx=o.x+1,ty=o.y+2.5;
+  let o,tx,ty;
+  if(state.type==='london'){
+    o=map.objects.filter(b=>b.key==='building'&&b.face==='front').sort((a,b)=>b.floors*b.cols-a.floors*a.cols)[0];
+    if(!o){alert('這張地圖沒有正面朝南的街屋，請按「換一張」。');return false;}
+    tx=o.x+o.cols/2;ty=o.y+o.rows+1;
+  }else{
+    o=map.objects.find(o=>o.key==='f-fireplace');if(!o){alert('這張地圖沒有壁爐，請按「換一張」。');return false;}
+    tx=o.x+1;ty=o.y+2.5;
+  }
   const best=map.cells.filter(c=>walkable(c.id)).sort((a,b)=>Math.hypot(a.x+.5-tx,a.y+.5-ty)-Math.hypot(b.x+.5-tx,b.y+.5-ty))[0];
   const c=cellCenter(best.id);actors.cell=best.id;actors.path=[];
   actors.player.g.position.set(c.x,0,c.z);
@@ -734,7 +827,7 @@ if(params.get('detail')==='0'){state.detail=false;document.getElementById('detai
 if(params.get('near')==='1'){state.near=true;document.getElementById('zoom').classList.add('on');}
 addEventListener('resize',()=>{resize();placeCamera(true);});
 resize();
-loadFireplace().finally(()=>{rebuild();if(params.get('fire')==='1')goFireplace();tick();});
+Promise.all([loadFireplace(),loadKit()]).finally(()=>{rebuild();if(params.get('fire')==='1')goFireplace();tick();});
 setTimeout(()=>document.getElementById('hint').remove(),6000);
 window.HD2D={state,get map(){return map},get scene(){return scene},rebuild,applyTime,applyFx,renderer};
 </script>
