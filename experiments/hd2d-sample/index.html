@@ -657,8 +657,16 @@ function applyTime(){
 
 /* ---------- 角色 ---------- */
 const loader=new THREE.TextureLoader();
+/* 立繪往後仰，頭頂幾乎貼到牆面，遮陽篷、凸窗、靠牆家具會插進立繪。
+   判斷前後遮擋時，把立繪沿視線往鏡頭移 SPRITE_DEPTH_BIAS 格：畫面上的位置與大小不變，
+   伸出半格左右的東西改畫在人物後面；前後相隔一整格的物件不受影響。光照與陰影仍用原位置。 */
+const SPRITE_DEPTH_BIAS=.5;
 function spriteMat(url){const t=loader.load(url);t.colorSpace=THREE.SRGBColorSpace;t.magFilter=THREE.NearestFilter;t.minFilter=THREE.LinearMipmapLinearFilter;
-  return new THREE.MeshStandardMaterial({map:t,alphaTest:.5,side:THREE.DoubleSide,emissive:0xffffff,emissiveMap:t,emissiveIntensity:.22,roughness:1});}
+  const m=new THREE.MeshStandardMaterial({map:t,alphaTest:.5,side:THREE.DoubleSide,emissive:0xffffff,emissiveMap:t,emissiveIntensity:.22,roughness:1});
+  m.onBeforeCompile=s=>{s.vertexShader=s.vertexShader.replace('#include <project_vertex>',
+    `#include <project_vertex>
+    { float d=length(mvPosition.xyz); gl_Position=projectionMatrix*vec4(mvPosition.xyz*max(.05,1.-${SPRITE_DEPTH_BIAS.toFixed(2)}/d),1.); }`);};
+  return m;}
 function makeActor(url,w,h){
   const g=new THREE.Group();
   const geo=new THREE.PlaneGeometry(w,h);geo.translate(0,h/2,0);
@@ -829,6 +837,10 @@ addEventListener('resize',()=>{resize();placeCamera(true);});
 resize();
 Promise.all([loadFireplace(),loadKit()]).finally(()=>{rebuild();if(params.get('fire')==='1')goFireplace();tick();});
 setTimeout(()=>document.getElementById('hint').remove(),6000);
-window.HD2D={state,get map(){return map},get scene(){return scene},rebuild,applyTime,applyFx,renderer};
+// 測試用：把主角移到指定格子（隊友站在旁邊）
+function teleport(id){const c=cellCenter(id);actors.cell=id;actors.path=[];actors.player.g.position.set(c.x,0,c.z);
+  const n=SceneMap.adjacent(map,id).filter(walkable).map(cellCenter)[0]||c;actors.lize.g.position.set(n.x,0,n.z);actors.history=Array(30).fill([n.x,n.z]);
+  placeCamera(true);updateSun(true);renderer.shadowMap.needsUpdate=true;}
+window.HD2D={state,get map(){return map},get scene(){return scene},rebuild,applyTime,applyFx,renderer,teleport,walkable};
 </script>
 </body>
