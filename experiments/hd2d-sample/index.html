@@ -373,16 +373,23 @@ function kitPut(g,list,key,x,y,z,style,paint,rr,rotY=0){
     o.material=n==='Brick'?kitStyleMat(style):n==='Paint'?kitPaintMat(paint):n==='Glass'?(lit?KIT.glassLit:KIT.mats.Glass):o.material;});
   return m;
 }
+/* 街屋正面的模組。正面可能朝南（front）、朝東或朝西（side），朝北的建物（back）鏡頭看到的是後牆。
+   at(i,out)：沿正面第 i 格、往外 out 格的位置（建物內座標）與模組要轉的角度。 */
 function kitFacade(g,o,W,D,FH,GH,style,rr,list){
-  const paint=pick(rr,KIT_PAINT),r=rr(),ground=r<.5?'shop':r<.82?'door':'pub';
-  const upper=pick(rr,['U_SASH','U_SASH','U_ARCH','U_BOX']),bay=o.floors>=2&&rr()<.5,doorCol=Math.min(W-1,Math.floor(W/2));
-  for(let f=0;f<o.floors;f++)for(let c=0;c<W;c++){
+  const side=o.face==='side',east=side&&o.street==='east',N=side?D:W;
+  const at=(i,out=0)=>side?(east?{x:W+out,z:D-i,rot:Math.PI/2}:{x:-out,z:i,rot:-Math.PI/2}):{x:i,z:D+out,rot:0};
+  const put=(key,i,y)=>{const p=at(i);return kitPut(g,list,key,p.x,y,p.z,style,paint,rr,p.rot);};
+  const paint=pick(rr,KIT_PAINT),r=rr(),rear=o.face==='back';
+  const ground=rear?'rear':r<.5?'shop':r<.82?'door':'pub';
+  const upper=rear?'U_SASH':pick(rr,['U_SASH','U_SASH','U_ARCH','U_BOX']),bay=!rear&&o.floors>=2&&rr()<.5,doorCol=Math.min(N-1,Math.floor(N/2));
+  for(let f=0;f<o.floors;f++)for(let c=0;c<N;c++){
     const key=f===0?(ground==='shop'?(c===doorCol?'G_SHOPDOOR':'G_SHOP'):ground==='pub'?'G_PUB':(c===doorCol?'G_DOOR':'G_SASH'))
       :(bay&&f===1&&c===doorCol?'U_BAY':upper==='U_BOX'&&f>1?'U_SASH':upper);
-    kitPut(g,list,key,c,f===0?0:GH+(f-1)*FH,D,style,paint,rr);
+    put(key,c,f===0?0:GH+(f-1)*FH);
   }
-  for(let c=0;c<W;c++)kitPut(g,list,'CORNICE',c,GH+(o.floors-1)*FH,D,style,paint,rr);
-  if(ground==='pub'){kitPut(g,list,'LAMP_BRACKET',doorCol,0,D,style,paint,rr);addPoint(o.x+doorCol+.5,1.22,o.y+D+.36,0xffb860,6,5,KIT.lamp,{dayFactor:0});}
+  for(let c=0;c<N;c++)put('CORNICE',c,GH+(o.floors-1)*FH);
+  if(ground==='pub'){put('LAMP_BRACKET',doorCol,0);const p=at(doorCol,.28),m=side?{x:0,z:east?-.5:.5}:{x:.5,z:0};
+    addPoint(o.x+p.x+m.x,1.52,o.y+p.z+m.z,0xffb860,6,5,KIT.lamp,{dayFactor:0});}
   return ground;
 }
 /* 一棟建物的模組依材質合併（每種材質一塊），減少繪製次數 */
@@ -429,8 +436,14 @@ function addFlames(parent,x,y,z){
 }
 
 /* 家具：每種家具用幾個貼像素材質的方塊組成。占地與擺放都來自 map-generator.js。 */
+/* 室內家具原本配合 1.55 格的人物；人物改成 1.2 格後，整組以後緣（靠北牆）為基準縮小。
+   AP() 把家具內的座標換成世界座標（給光源用）。街上的路燈、長椅、花台不縮。 */
+const FURN_SCALE=.78;
 function furniture(o,r){
   const g=new THREE.Group();g.position.set(o.x,0,o.y);world.add(g);
+  const S=o.key.startsWith('f-')?FURN_SCALE:1,ox=o.cols/2*(1-S);
+  if(S!==1){g.scale.setScalar(S);g.position.x+=ox;}
+  const AP=(lx,ly,lz,...a)=>addPoint(o.x+ox+lx*S,ly*S,o.y+lz*S,...a);
   const W=o.cols,D=o.rows,brass=plain(0xc9a14a,{metalness:.7,roughness:.35}),dark=plain(0x2a1a10);
   const legs=(x0,z0,w,d,h,m=dark)=>{for(const[a,b]of[[x0,z0],[x0+w-.06,z0],[x0,z0+d-.06],[x0+w-.06,z0+d-.06]])block(g,a,0,b,.06,h,.06,m);};
   const front=(m,frontMat)=>[m,m,m,m,frontMat,m];
@@ -449,25 +462,25 @@ function furniture(o,r){
       g.add(m);
       addFlames(g,1,.24,.12);addHalo(g,1,.34,.3,1.3,0xff8030);
       for(const x of [.52,1.48])addHalo(g,x,1.51,.22,.35,0xffc070);
-      addPoint(o.x+1,.6,o.y+1.05,0xff7a30,5,6,coals,{flick:.25,dayFactor:.6});break;
+      AP(1,.6,1.05,0xff7a30,5,6,coals,{flick:.25,dayFactor:.6});break;
     }else{block(g,.05,0,0,W-.1,1.2,.42,mat('marble',{roughness:.5}));block(g,0,1.2,0,W,.1,.5,mat('marble',{roughness:.5}));
       block(g,W/2-.45,0,.25,.9,.75,.2,plain(0x0c0806));
       const fire=new THREE.MeshStandardMaterial({color:0xffa040,emissive:0xff7a20,emissiveIntensity:4});
       for(let k=0;k<5;k++){const f=mesh(new THREE.BoxGeometry(.1,.14+r()*.2,.08),fire,{cast:false});f.position.set(W/2-.3+k*.15,.12,.38);g.add(f);}
       addHalo(g,W/2,.35,.5,1.4,0xff8030);
       block(g,W/2-.3,1.3,.1,.08,.25,.08,brass);block(g,W/2+.22,1.3,.1,.08,.25,.08,brass);
-      addPoint(o.x+W/2,.5,o.y+.9,0xff7a30,9,6,fire,{flick:.25,dayFactor:.6});break;}
+      AP(W/2,.5,.9,0xff7a30,9,6,fire,{flick:.25,dayFactor:.6});break;}
 
     case 'f-desk':{block(g,.1,.72,.15,W-.2,.07,.65,mat('woodLight'));block(g,.12,0,.15,.45,.72,.62,front(mat('wood'),mat('drawers')));block(g,W-.57,0,.15,.45,.72,.62,front(mat('wood'),mat('drawers')));
       block(g,.6,.79,.35,.4,.02,.3,mat('linen'));block(g,W-.5,.79,.3,.06,.3,.06,brass);
       const shadeM=new THREE.MeshStandardMaterial({color:0x5a8a5a,emissive:0xffd890,emissiveIntensity:2.2,roughness:.4});
       const s=mesh(new THREE.CylinderGeometry(.08,.16,.14,8),shadeM,{cast:false});s.position.set(W-.47,1.15,.33);g.add(s);addHalo(g,W-.47,1.1,.4,.8,0xffd890);
-      addPoint(o.x+W-.47,1.1,o.y+.6,0xffd890,3,3.5,shadeM);break;}
+      AP(W-.47,1.1,.6,0xffd890,3,3.5,shadeM);break;}
     case 'f-globe':{block(g,.42,0,.42,.16,.7,.16,mat('wood'));const tex=canvasTex(16,8,(gg,px,rr)=>{px(0,0,'#3c6a8a',16,8);for(let k=0;k<14;k++)px(rr()*16,rr()*8,'#8a9a5a',2,1);},{seed:o.x*31+o.y});
       const s=mesh(new THREE.SphereGeometry(.24,12,8),new THREE.MeshStandardMaterial({map:tex,roughness:.5}));s.position.set(.5,.95,.5);g.add(s);break;}
     case 'f-bed':{block(g,.1,0,.05,W-.2,.35,D-.15,mat('wood'));block(g,.1,0,0,W-.2,1.25,.12,mat('wood'));block(g,.15,.35,.12,W-.3,.18,D-.3,mat('linen'));
       block(g,.18,.4,.65,W-.36,.16,D-.85,mat('quilt'));block(g,.25,.52,.18,.6,.12,.35,mat('linen'));block(g,W-.85,.52,.18,.6,.12,.35,mat('linen'));block(g,.1,0,D-.15,W-.2,.6,.08,mat('wood'));break;}
-    case 'f-nightstand':block(g,.2,0,.15,.6,.6,.5,front(mat('wood'),mat('drawers')));{const c=new THREE.MeshStandardMaterial({color:0xfff0c0,emissive:0xffc060,emissiveIntensity:3});const m=mesh(new THREE.BoxGeometry(.05,.12,.05),c,{cast:false});m.position.set(.5,.68,.4);g.add(m);addHalo(g,.5,.75,.45,.5,0xffc060);addPoint(o.x+.5,.9,o.y+.7,0xffb060,2.5,3.5,c,{flick:.12});}break;
+    case 'f-nightstand':block(g,.2,0,.15,.6,.6,.5,front(mat('wood'),mat('drawers')));{const c=new THREE.MeshStandardMaterial({color:0xfff0c0,emissive:0xffc060,emissiveIntensity:3});const m=mesh(new THREE.BoxGeometry(.05,.12,.05),c,{cast:false});m.position.set(.5,.68,.4);g.add(m);addHalo(g,.5,.75,.45,.5,0xffc060);AP(.5,.9,.7,0xffb060,2.5,3.5,c,{flick:.12});}break;
     case 'f-wardrobe':block(g,.1,0,.05,W-.2,2.1,.55,front(mat('wood'),mat('drawers')));block(g,.05,2.1,0,W-.1,.1,.62,mat('wood'));break;
     case 'f-washstand':block(g,.15,0,.15,.7,.75,.45,mat('wood'));block(g,.12,.75,.12,.76,.05,.5,mat('marble',{roughness:.4}));{const b=mesh(new THREE.CylinderGeometry(.18,.12,.1,10),mat('linen',{roughness:.3}));b.position.set(.5,.85,.37);g.add(b);}break;
     case 'f-sideboard':block(g,.1,0,.08,W-.2,.9,.5,front(mat('wood'),mat('drawers')));block(g,W/2-.04,.9,.25,.08,.35,.08,brass);break;
@@ -475,7 +488,7 @@ function furniture(o,r){
       for(let k=0;k<3;k++){const cx=.5+k*(W-1)/2;block(g,cx-.2,0,.05,.4,.45,.35,mat('wood'));block(g,cx-.2,.45,.02,.4,.5,.06,mat('wood'));block(g,cx-.2,0,D-.4,.4,.45,.35,mat('wood'));}
       const c=new THREE.MeshStandardMaterial({color:0xfff0c0,emissive:0xffc060,emissiveIntensity:3});
       for(const dx of[-.3,0,.3]){const m=mesh(new THREE.BoxGeometry(.04,.16,.04),c,{cast:false});m.position.set(W/2+dx,.88,D/2);g.add(m);}
-      addHalo(g,W/2,.95,D/2,1.2,0xffc060);addPoint(o.x+W/2,1.4,o.y+D/2,0xffc070,4,4,c,{flick:.1});break;}
+      addHalo(g,W/2,.95,D/2,1.2,0xffc060);AP(W/2,1.4,D/2,0xffc070,4,4,c,{flick:.1});break;}
     case 'f-plant':{const pot=mesh(new THREE.CylinderGeometry(.18,.13,.3,8),plain(0x8a5a3a));pot.position.set(.5,.15,.5);g.add(pot);
       const leaf=new THREE.MeshStandardMaterial({color:0x4a7a40,flatShading:true,roughness:.8});
       for(let k=0;k<5;k++){const s=mesh(new THREE.IcosahedronGeometry(.16+r()*.08,0),leaf);s.position.set(.5+(r()-.5)*.3,.45+r()*.35,.5+(r()-.5)*.3);g.add(s);}break;}
@@ -483,7 +496,7 @@ function furniture(o,r){
       const glass=new THREE.MeshStandardMaterial({color:0xffe6b0,emissive:0xffc070,emissiveIntensity:.2,roughness:.3});
       block(g,.38,1.9,.38,.24,.3,.24,glass,{cast:false});block(g,.34,2.2,.34,.32,.06,.32,mat('iron'));
       const h=addHalo(g,.5,2.05,.5,2.2,0xffc070);
-      addPoint(o.x+.5,1.95,o.y+.5,0xffb860,14,7,glass,{dayFactor:0});lights.points[lights.points.length-1].matBase=4;break;}
+      AP(.5,1.95,.5,0xffb860,14,7,glass,{dayFactor:0});lights.points[lights.points.length-1].matBase=4;break;}
     case 'bench':block(g,.1,.35,.3,W-.2,.06,.4,mat('woodLight'));block(g,.1,.4,.25,W-.2,.4,.06,mat('woodLight'));legs(.15,.3,W-.3,.4,.35,mat('iron'));break;
     case 'planter':{block(g,.15,0,.15,.7,.4,.7,mat('brick'));const leaf=new THREE.MeshStandardMaterial({color:0x4f6e3f,flatShading:true});for(let k=0;k<4;k++){const s=mesh(new THREE.IcosahedronGeometry(.2,0),leaf);s.position.set(.35+r()*.3,.55,.35+r()*.3);g.add(s);}break;}
     default:block(g,.1,0,.1,W-.2,.8,D-.2,mat('wood'));
@@ -523,8 +536,8 @@ function facadeTex(o,cols,floors,kind){
 }
 function building(o){
   const g=new THREE.Group();g.position.set(o.x,0,o.y);world.add(g);
-  // 精細素材：正面朝南的一般建物改用 Blender 模組；側面、背面與地標維持程式繪製
-  const useKit=state.detail&&KIT.ready&&o.key==='building'&&o.face==='front';
+  // 精細素材：一般建物改用 Blender 模組（正面朝哪都一樣）；地標維持程式繪製
+  const useKit=state.detail&&KIT.ready&&o.key==='building';
   // 模組的一樓（店面、大門）較高：1.5 格，人物約 1.2 格；樓上每層 1.125 格
   const FH=1.125,GH=useKit?1.5:FH,H=GH+(o.floors-1)*FH+.2,W=o.cols,D=o.rows;
   const rk=makeRng(o.seed^0x5151),style=useKit?pick(rk,KIT_STYLES):null,kitParts=[];
@@ -537,10 +550,13 @@ function building(o){
   // 材質順序 +x,-x,+y,-y,+z,-z
   const faces=[sideTex,sideTex,plain(0x2c3236),plainMat,o.face==='front'?facadeMat:sideTex,plainMat];
   if(o.face==='side'){if(o.street==='east')faces[0]=facadeMat;else faces[1]=facadeMat;}
-  if(useKit){faces[0]=faces[1]=kitSideMat(style);faces[4]=plain(0x18130f);}
-  const bodyD=useKit?D-.06:D;   // 模組的牆板厚 0.06，嵌在本體前方
+  // 模組的牆板厚 0.06，嵌在本體正面那一側：本體在那一側縮進 0.06，該面塗成暗色
+  let bx0=0,bx1=W,bz1=D;
+  if(useKit){const sm=kitSideMat(style),dark=plain(0x18130f);faces[0]=faces[1]=faces[4]=sm;
+    if(o.face==='side'){if(o.street==='east'){faces[0]=dark;bx1=W-.06;}else{faces[1]=dark;bx0=.06;}}
+    else{faces[4]=dark;bz1=D-.06;}}
   tex.repeat.set(1/visibleCols,1/H);em.repeat.set(1/visibleCols,1/H);
-  const body=mesh(box(W,H,bodyD),faces);body.position.set(W/2,H/2,bodyD/2);g.add(body);
+  const body=mesh(box(bx1-bx0,H,bz1),faces);body.position.set((bx0+bx1)/2,H/2,bz1/2);g.add(body);
   const parts=[body];
   // 屋頂
   const rr=makeRng(o.seed^7),roofKind=o.key==='landmark'?'landmark':o.face==='back'?'flat':pick(rr,['gable','gable','flat','mansard']);
@@ -552,7 +568,7 @@ function building(o){
     if(useKit){
       // 屋脊附近的煙囪與屋頂前坡的老虎窗（模組）
       for(let k=0;k<Math.max(1,W/3|0);k++)kitPut(g,kitParts,'CHIMNEY',.6+k*2.6,H+rh*.5-.15,D*.25,style,null,rk);
-      if(D>=2&&rk()<.7)kitPut(g,kitParts,'DORMER',W/2+(W>=3?.5:0),H-.05,D-.2,style,'#e8e2d4',rk);
+      if(o.face==='front'&&D>=2&&rk()<.7)kitPut(g,kitParts,'DORMER',W/2+(W>=3?.5:0),H-.05,D-.2,style,'#e8e2d4',rk);
     }else for(let k=0;k<Math.max(1,W/3|0);k++)parts.push(block(g,.4+k*2.6,H+.3,D*.25,.35,1.2,.35,mat('brick')));}
   else if(roofKind==='mansard'){parts.push(block(g,.12,H,.12,W-.24,.8,D-.24,roofMat));parts.push(block(g,0,H,0,W,.06,D,plain(0x2c3236)));
     for(let k=0;k<W;k++)parts.push(block(g,k+.3,H+.15,D-.2,.4,.5,.12,plain(0xd8cfb8)));}
@@ -566,8 +582,10 @@ function building(o){
   let ground=null;
   if(useKit){ground=kitFacade(g,o,W,D,FH,GH,style,rk,kitParts);parts.push(...mergeInto(g,kitParts));}
   // 店面遮陽篷（模組版只放在商店）
+  // 模組版：裝在招牌上方、只伸出約 0.35 格，從鏡頭看整片在人物頭頂之上（人物 1.2 格）
   if(o.face==='front'&&(useKit?ground==='shop'&&rr()<.35:rr()<.45)){const aw=canvasTex(16,8,(gg,px)=>{for(let x=0;x<16;x+=4)px(x,0,'#7a2630',2,8),px(x+2,0,'#e8dcc0',2,8);},{seed:o.seed});
-    const a=mesh(new THREE.BoxGeometry(W-.2,.05,.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));a.position.set(W/2,useKit?1.24:.95,D+.3);a.rotation.x=.35;g.add(a);parts.push(a);}
+    const a=mesh(new THREE.BoxGeometry(W-.2,.05,useKit?.36:.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));
+    if(useKit){a.position.set(W/2,1.47,D+.18);a.rotation.x=.3;}else{a.position.set(W/2,.95,D+.3);a.rotation.x=.35;}g.add(a);parts.push(a);}
   for(const p of parts){fadeables.push(p);}
   g.userData.parts=parts;
 }
