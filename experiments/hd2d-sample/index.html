@@ -315,6 +315,40 @@ function woodInstances(list,cast){
     inst.computeBoundingSphere();world.add(inst);}
 }
 /* 林緣：地面外圍三格內種樹。樹會往北遮住後方，所以北側三格內有地面的位置只放矮灌木與岩石 */
+/* 林地地面：小徑泥土、草地、林下苔蘚畫在同一片上。
+   每格記一個點（泥土／苔蘚／有無地面），格與格之間平滑內插，再加上大小兩層雜訊決定分界，
+   所以邊界是彎曲、參差的；判斷以 1/32 格為單位，邊緣仍是像素格。 */
+function woodGround(){
+  const P=3,W=map.cols+P*2,H=map.rows+P*2,data=new Uint8Array(W*H*4);
+  const core=(x,y)=>isActive(x,y)&&map.cells[y*map.cols+x].core;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const cx=x-P,cy=y-P,i=(y*W+x)*4;let near=false;
+    for(let dy=-3;dy<=3&&!near;dy++)for(let dx=-3;dx<=3;dx++)if(isActive(cx+dx,cy+dy)){near=true;break;}
+    data[i]=core(cx,cy)?255:0;data[i+1]=isActive(cx,cy)?0:255;data[i+3]=near?255:0;}
+  const mask=new THREE.DataTexture(data,W,H,THREE.RGBAFormat);mask.magFilter=mask.minFilter=THREE.LinearFilter;mask.needsUpdate=true;
+  const nc=document.createElement('canvas');nc.width=nc.height=64;const ng=nc.getContext('2d'),nr=makeRng(map.seed^0x9a);
+  for(let y=0;y<64;y++)for(let x=0;x<64;x++){const v=nr()*255|0;ng.fillStyle=`rgb(${v},${v},${v})`;ng.fillRect(x,y,1,1);}
+  const noise=(f)=>{const t=new THREE.CanvasTexture(nc);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.magFilter=f;t.minFilter=f;t.generateMipmaps=false;t.colorSpace=THREE.NoColorSpace;return t;};
+  const m=new THREE.MeshStandardMaterial({roughness:1});
+  m.onBeforeCompile=sh=>{
+    Object.assign(sh.uniforms,{uMask:{value:mask},uSmooth:{value:noise(THREE.LinearFilter)},uFine:{value:noise(THREE.NearestFilter)},
+      uGrass:{value:T.grass},uDirt:{value:T.dirt},uMoss:{value:T.moss}});
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWPos;')
+      .replace('#include <project_vertex>','#include <project_vertex>\nvWPos=(modelMatrix*vec4(transformed,1.0)).xyz;');
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uMask,uSmooth,uFine,uGrass,uDirt,uMoss;')
+      .replace('#include <map_fragment>',`
+      vec2 q=(floor(vWPos.xz*32.)+.5)/32.;
+      vec4 mk=texture2D(uMask,(q+${P}.)/vec2(${W}.,${H}.));
+      float k=(texture2D(uSmooth,q*.3).r-.5)*.5+(texture2D(uSmooth,q*1.1).r-.5)*.22+(texture2D(uFine,q*.5).r-.5)*.22;
+      if(mk.a+k<.5)discard;
+      float d=mk.r+k,mo=mk.g+k*.9;
+      vec4 col=mo>.5?texture2D(uMoss,vWPos.xz):texture2D(uGrass,vWPos.xz);
+      if(d>.5)col=texture2D(uDirt,vWPos.xz)*(d<.56?.82:1.);   // 泥土邊緣稍暗，像被踩實的土
+      else if(d>.42)col.rgb*=.9;                              // 小徑旁的草較稀、偏暗
+      diffuseColor*=col;`);
+  };
+  const g=new THREE.PlaneGeometry(W,H);g.rotateX(-Math.PI/2);
+  const plane=mesh(g,m,{cast:false});plane.position.set(map.cols/2,0,map.rows/2);plane.receiveShadow=true;world.add(plane);
+}
 function woodBorder(){
   const r=makeRng(map.seed^0xb0d),near=[],items=[];
   const dist=(x,y)=>{let d=9;for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++)if(isActive(x+dx,y+dy))d=Math.min(d,Math.max(Math.abs(dx),Math.abs(dy)));return d;};
@@ -330,7 +364,6 @@ function woodBorder(){
     }else if(r()<(d===1?.7:.9)){const name=pick(r,tall),geo=woodGeo(name),b=geo.boundingBox;
       items.push({geo,x:jx,z:jz,rot:r()*6.28,s:(3+r()*1.2)/(b.max.y-b.min.y)});}
   }
-  floorTiles(near,mat('moss',{roughness:1}));
   woodInstances(items,true);
 }
 /* 地上的草叢、野花、蘑菇：不占格、很矮，只放在空地（不放在小徑與物件上） */
@@ -343,8 +376,7 @@ function woodDecor(){
 }
 function buildWoodland(){
   const act=map.cells.filter(c=>c.active);
-  floorTiles(act.filter(c=>c.core),mat('dirt',{roughness:1}));
-  floorTiles(act.filter(c=>!c.core),mat('grass',{roughness:1}));
+  woodGround();
   if(!WOOD.ready){for(const o of map.objects)furniture(o,makeRng(1));return;}
   woodBorder();
   for(const o of map.objects)if(!woodObject(o))furniture(o,makeRng(1));
@@ -555,7 +587,21 @@ function kitFacade(g,o,W,D,FH,GH,style,rr,list){
   return ground;
 }
 // 單色零件的顏色（取自 make_street_textures.py 的底色；油漆再乘上每棟的顏色）
-const KIT_FLAT={Frame:'#efebe0',Stone:'#cdc7b9',Paint:'#f2efe8',Iron:'#262a2e',Clay:'#a45a3a',Leaves:'#44663a',Gilt:'#c8a24c'};
+const KIT_FLAT={Frame:'#efebe0',Stone:'#cdc7b9',Paint:'#f2efe8',Iron:'#262a2e',Clay:'#a45a3a',Leaves:'#44663a',Gilt:'#c8a24c',AwnRed:'#7a2630',AwnCream:'#e8dcc0'};
+/* 店面遮陽篷：用紅白兩色的長條拼成，併進該棟的單色零件（不另外多一次繪製）。
+   裝在招牌上方、只伸出約 0.35 格，從鏡頭看整片在人物頭頂之上。side＝正面朝東或朝西 */
+const AWN_MATS=[new THREE.MeshBasicMaterial({name:'AwnRed'}),new THREE.MeshBasicMaterial({name:'AwnCream'})];
+const AWN_UV1=[.6514,.4033];   // 凹處陰影圖裡沒有陰影的一點（模組零件都要有第二組 UV 才能合併）
+function kitAwning(g,o,W,D){
+  const side=o.face==='side',east=o.street==='east',len=(side?D:W)-.2,n=Math.max(6,Math.round(len/.3)),w=len/n;
+  const root=new THREE.Group(),tilt=new THREE.Group();
+  if(side){root.position.set(east?W:0,0,D/2);root.rotation.y=east?Math.PI/2:-Math.PI/2;}else root.position.set(W/2,0,D);
+  tilt.position.set(0,1.47,.18);tilt.rotation.x=.3;root.add(tilt);
+  for(let i=0;i<n;i++){const geo=new THREE.BoxGeometry(w,.05,.36),c=geo.attributes.position.count,u=new Float32Array(c*2);
+    for(let k=0;k<c;k++){u[k*2]=AWN_UV1[0];u[k*2+1]=AWN_UV1[1];}geo.setAttribute('uv1',new THREE.BufferAttribute(u,2));
+    const m=new THREE.Mesh(geo,AWN_MATS[i%2]);m.position.x=-len/2+w*(i+.5);tilt.add(m);}
+  g.add(root);return root;
+}
 /* 一棟建物的模組依材質合併（每種材質一塊），減少繪製次數 */
 function mergeInto(g,roots){
   g.updateMatrixWorld(true);
@@ -758,17 +804,13 @@ function building(o){
     lights.windows.push({facade:clock});
     const sp=mesh(new THREE.ConeGeometry(tw*.75,2.2,4),roofMat);sp.rotation.y=Math.PI/4;sp.position.set(W/2,H+3.5,D/2);g.add(sp);parts.push(sp);}
   let ground=null;
-  if(useKit){ground=kitFacade(g,o,W,D,FH,GH,style,rk,kitParts);parts.push(...mergeInto(g,kitParts));}
-  // 店面遮陽篷（模組版只放在商店）
-  // 模組版：裝在招牌上方、只伸出約 0.35 格，從鏡頭看整片在人物頭頂之上（人物 1.2 格）
-  // 側街（正面朝東或朝西）的商店也加：同一片遮陽篷轉 90 度貼在側面
-  const side=o.face==='side';
-  if((o.face==='front'||useKit&&side)&&(useKit?ground==='shop'&&rr()<(side?.5:.35):rr()<.45)){const aw=canvasTex(16,8,(gg,px)=>{for(let x=0;x<16;x+=4)px(x,0,'#7a2630',2,8),px(x+2,0,'#e8dcc0',2,8);},{seed:o.seed});
-    const a=mesh(new THREE.BoxGeometry((side?D:W)-.2,.05,useKit?.36:.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));
-    if(useKit){const pv=new THREE.Group(),east=o.street==='east';
-      if(side){pv.position.set(east?W:0,0,D/2);pv.rotation.y=east?Math.PI/2:-Math.PI/2;}else pv.position.set(W/2,0,D);
-      a.position.set(0,1.47,.18);a.rotation.x=.3;pv.add(a);g.add(pv);}
-    else{a.position.set(W/2,.95,D+.3);a.rotation.x=.35;g.add(a);}parts.push(a);}
+  if(useKit){ground=kitFacade(g,o,W,D,FH,GH,style,rk,kitParts);
+    if(ground==='shop'&&rr()<(o.face==='side'?.5:.35))kitParts.push(kitAwning(g,o,W,D));   // 模組版只放在商店
+    parts.push(...mergeInto(g,kitParts));}
+  // 店面遮陽篷（非模組版；模組版見 kitAwning）
+  if(!useKit&&o.face==='front'&&rr()<.45){const aw=canvasTex(16,8,(gg,px)=>{for(let x=0;x<16;x+=4)px(x,0,'#7a2630',2,8),px(x+2,0,'#e8dcc0',2,8);},{seed:o.seed});
+    const a=mesh(new THREE.BoxGeometry(W-.2,.05,.7),new THREE.MeshStandardMaterial({map:aw,roughness:.9}));
+    a.position.set(W/2,.95,D+.3);a.rotation.x=.35;g.add(a);parts.push(a);}
   for(const p of parts){fadeables.push(p);}
   g.userData.parts=parts;
 }
