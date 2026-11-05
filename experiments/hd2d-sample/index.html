@@ -38,6 +38,8 @@
     <div class="row"><span>後製</span>
       <button data-fx="bloom" class="on">泛光</button><button data-fx="tilt" class="on">移軸模糊</button>
       <button data-fx="pixel">全畫面像素化</button></div>
+    <div class="row"><span>素材</span>
+      <button id="detail" class="on">精細壁爐</button><button id="gofire">看壁爐</button><button id="zoom">近看</button></div>
   </div>
 </div>
 <div id="hint">點地面移動，或用方向鍵／WASD</div>
@@ -53,13 +55,14 @@ import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {HorizontalTiltShiftShader} from 'three/addons/shaders/HorizontalTiltShiftShader.js';
 import {VerticalTiltShiftShader} from 'three/addons/shaders/VerticalTiltShiftShader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 
 window.addEventListener('error',e=>{document.getElementById('err').textContent+=e.message+'\n';});
 
 /* ---------- 共用 ---------- */
 const TEX=32;                       // 每格 32 個像素：材質解析度
 const WALL_H=2.4;
-const state={type:'residence',seed:927,time:'day',fx:{bloom:true,tilt:true,pixel:false}};
+const state={type:'residence',seed:927,time:'day',fx:{bloom:true,tilt:true,pixel:false},detail:true,near:false};
 const params=new URLSearchParams(location.search);
 if(params.get('type'))state.type=params.get('type');
 if(params.get('seed'))state.seed=+params.get('seed');
@@ -309,6 +312,47 @@ function addPoint(x,y,z,color,intensity,distance,emissiveMat,{flick=.0,dayFactor
   lights.points.push(p);return p;
 }
 
+/* ---------- 精細素材：Blender 輸出的壁爐 ---------- */
+const FIREPLACE={scene:null};
+function loadFireplace(){
+  // 預先算好的凹處陰影，貼在模型的第二組 UV 上（glTF 的 UV 不需上下翻轉）
+  const ao=new THREE.TextureLoader().load('assets/fireplace-ao.png');ao.flipY=false;ao.channel=1;ao.colorSpace=THREE.NoColorSpace;
+  return new GLTFLoader().loadAsync('assets/fireplace.glb').then(g=>{
+    g.scene.traverse(o=>{
+      if(!o.isMesh)return;const m=o.material;
+      if(m.map){m.map.magFilter=THREE.NearestFilter;m.map.minFilter=THREE.NearestMipmapLinearFilter;m.map.anisotropy=4;}
+      m.aoMap=ao;m.aoMapIntensity=1;
+      if(m.name==='Coals'){m.emissive.set(0xff8a30);m.emissiveMap=m.map;m.emissiveIntensity=3;}
+      else if(m.name==='Flame'){m.emissive.set(0xffc060);m.emissiveMap=null;m.emissiveIntensity=5;m.aoMap=null;}
+      else if(m.name==='Mirror'){m.emissive.set(0xffffff);m.emissiveMap=m.map;m.emissiveIntensity=.3;}  // 鏡面帶一點自身亮度，像反射房間
+      else{m.emissive.set(0);m.emissiveIntensity=0;}
+    });
+    FIREPLACE.scene=g.scene;
+  }).catch(e=>console.warn('壁爐模型載入失敗',e));
+}
+/* 像素火苗：4 格動畫，每片火苗各自錯開 */
+let flameTex=null;const flames=[];
+function flameSheet(){
+  if(flameTex)return flameTex;
+  const FW=12,FH=20;
+  flameTex=canvasTex(FW*4,FH,(g,px,r)=>{
+    for(let f=0;f<4;f++)for(let y=0;y<FH;y++){
+      const t=y/FH,w=Math.max(0,Math.round(5.2*Math.pow(Math.sin(Math.PI*Math.min(1,(1-t)*1.05)),.7)*(1-t*.35))),sway=Math.round(Math.sin(t*5+f*1.6)*1.4*t);
+      for(let x=-w;x<=w;x++){const e=Math.abs(x)/(w+.01),c=e>.7||t<.08?'#e0501c':e>.4||t<.25?'#ff9a30':t>.6?'#ffd060':'#fff2b0';px(f*FW+6+x+sway,FH-1-y,c);}
+      if(f%2&&y===FH-2)px(f*FW+6+sway,0,'#ff9a30');
+    }
+  },{repeat:false,seed:5});
+  flameTex.repeat.set(.25,1);return flameTex;
+}
+function addFlames(parent,x,y,z){
+  for(const [dx,s,ph] of [[-.1,.75,0],[0,1,2],[.11,.8,1]]){
+    const tex=flameSheet().clone();tex.needsUpdate=true;
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(.18*s,.3*s).translate(0,.15*s,0),
+      new THREE.MeshBasicMaterial({map:tex,transparent:true,alphaTest:.1,depthWrite:false,toneMapped:false,color:new THREE.Color(2.2,1.7,1.3)}));
+    m.position.set(x+dx,y,z+Math.abs(dx)*.3);parent.add(m);flames.push({tex,phase:ph});
+  }
+}
+
 /* 家具：每種家具用幾個貼像素材質的方塊組成。占地與擺放都來自 map-generator.js。 */
 function furniture(o,r){
   const g=new THREE.Group();g.position.set(o.x,0,o.y);world.add(g);
@@ -323,13 +367,22 @@ function furniture(o,r){
     case 'f-cabinet':block(g,.1,0,.05,.8,1.05,.45,front(mat('wood'),mat('drawers')));block(g,.3,1.05,.15,.15,.25,.15,plain(0x3f5a52,{roughness:.3}));break;
     case 'f-clock':{block(g,.28,0,.08,.44,1.95,.34,mat('wood'));const face=new THREE.MeshStandardMaterial({color:0xe8dcc0,emissive:0x302010,roughness:.5});const f=mesh(new THREE.CircleGeometry(.16,12),face,{cast:false});f.position.set(.5,1.62,.425);g.add(f);block(g,.47,.6,.42,.06,.6,.02,brass);break;}
     case 'f-piano':block(g,.1,0,.05,W-.2,1.15,.55,plain(0x15110f,{roughness:.25}));block(g,.15,.72,.6,W-.3,.06,.22,mat('linen'));block(g,.15,.7,.6,W-.3,.04,.24,plain(0x15110f,{roughness:.25}));break;
-    case 'f-fireplace':{block(g,.05,0,0,W-.1,1.2,.42,mat('marble',{roughness:.5}));block(g,0,1.2,0,W,.1,.5,mat('marble',{roughness:.5}));
+    case 'f-fireplace':if(state.detail&&FIREPLACE.scene){
+      // Blender 做的精細壁爐（assets/fireplace.glb）；火焰、光暈、光源在這裡加上
+      const m=FIREPLACE.scene.clone(true);let coals=null;
+      m.traverse(c=>{if(!c.isMesh)return;c.castShadow=c.receiveShadow=true;c.userData.keep=true;if(c.material.name==='Coals')coals=c.material;});
+      g.add(m);
+      addFlames(g,1,.24,.12);addHalo(g,1,.34,.3,1.3,0xff8030);
+      for(const x of [.52,1.48])addHalo(g,x,1.51,.22,.35,0xffc070);
+      addPoint(o.x+1,.6,o.y+1.05,0xff7a30,5,6,coals,{flick:.25,dayFactor:.6});break;
+    }else{block(g,.05,0,0,W-.1,1.2,.42,mat('marble',{roughness:.5}));block(g,0,1.2,0,W,.1,.5,mat('marble',{roughness:.5}));
       block(g,W/2-.45,0,.25,.9,.75,.2,plain(0x0c0806));
       const fire=new THREE.MeshStandardMaterial({color:0xffa040,emissive:0xff7a20,emissiveIntensity:4});
       for(let k=0;k<5;k++){const f=mesh(new THREE.BoxGeometry(.1,.14+r()*.2,.08),fire,{cast:false});f.position.set(W/2-.3+k*.15,.12,.38);g.add(f);}
       addHalo(g,W/2,.35,.5,1.4,0xff8030);
       block(g,W/2-.3,1.3,.1,.08,.25,.08,brass);block(g,W/2+.22,1.3,.1,.08,.25,.08,brass);
       addPoint(o.x+W/2,.5,o.y+.9,0xff7a30,9,6,fire,{flick:.25,dayFactor:.6});break;}
+
     case 'f-desk':{block(g,.1,.72,.15,W-.2,.07,.65,mat('woodLight'));block(g,.12,0,.15,.45,.72,.62,front(mat('wood'),mat('drawers')));block(g,W-.57,0,.15,.45,.72,.62,front(mat('wood'),mat('drawers')));
       block(g,.6,.79,.35,.4,.02,.3,mat('linen'));block(g,W-.5,.79,.3,.06,.3,.06,brass);
       const shadeM=new THREE.MeshStandardMaterial({color:0x5a8a5a,emissive:0xffd890,emissiveIntensity:2.2,roughness:.4});
@@ -438,7 +491,7 @@ function mergeStatic(){
   world.updateMatrixWorld(true);
   const skip=new Set(fadeables),buckets=new Map(),remove=[];
   world.traverse(o=>{
-    if(!o.isMesh||o.isInstancedMesh||skip.has(o))return;
+    if(!o.isMesh||o.isInstancedMesh||skip.has(o)||o.userData.keep)return;
     const mats=Array.isArray(o.material)?o.material:[o.material];
     if(mats.some(m=>m.transparent))return;
     const flat=o.geometry.index?o.geometry.toNonIndexed():o.geometry;
@@ -570,7 +623,7 @@ let viewCells=12;
 function resize(){
   const w=innerWidth,h=innerHeight;renderer.setSize(w,h);composer.setSize(w,h);
   camera.aspect=w/h;camera.updateProjectionMatrix();
-  viewCells=w<h?7:13;
+  viewCells=state.near?(w<h?4.2:7):(w<h?7:13);
   const pr=renderer.getPixelRatio();
   tiltH.uniforms.h.value=1.6/(w*pr);tiltV.uniforms.v.value=1.6/(h*pr);
   pixelPass.setPixelSize(w<500?2:3);
@@ -634,6 +687,7 @@ function tick(){
   placeCamera(false);
   if(updateSun(false)||moving||companionMoving)renderer.shadowMap.needsUpdate=true;
   updateLightPool(dt,t);
+  for(const f of flames)f.tex.offset.x=(Math.floor(t*11+f.phase)%4)/4;
   renderer.info.reset();
   composer.render();
   cpu+=performance.now()-t0;
@@ -659,9 +713,28 @@ document.getElementById('toggle').onclick=e=>{const p=document.getElementById('p
 setOn('[data-type]','type',state.type);setOn('[data-time]','time',state.time);
 document.querySelectorAll('[data-fx]').forEach(b=>b.classList.toggle('on',state.fx[b.dataset.fx]));
 
-function rebuild(){build();renderer.shadowMap.needsUpdate=true;renderPass.scene=scene;pixelPass.scene=scene;applyFx();placeCamera(true);}
+function rebuild(){flames.length=0;build();renderer.shadowMap.needsUpdate=true;renderPass.scene=scene;pixelPass.scene=scene;applyFx();placeCamera(true);}
+/* 把主角移到第一座壁爐正前方，方便比較 */
+function goFireplace(){
+  const o=map.objects.find(o=>o.key==='f-fireplace');if(!o){alert('這張地圖沒有壁爐，請按「換一張」。');return false;}
+  const tx=o.x+1,ty=o.y+2.5;
+  const best=map.cells.filter(c=>walkable(c.id)).sort((a,b)=>Math.hypot(a.x+.5-tx,a.y+.5-ty)-Math.hypot(b.x+.5-tx,b.y+.5-ty))[0];
+  const c=cellCenter(best.id);actors.cell=best.id;actors.path=[];
+  actors.player.g.position.set(c.x,0,c.z);
+  const near=SceneMap.adjacent(map,best.id).filter(walkable).map(cellCenter).sort((a,b)=>Math.abs(a.z-c.z)-Math.abs(b.z-c.z))[0]||c;
+  actors.lize.g.position.set(near.x,0,near.z);actors.history=Array(30).fill([near.x,near.z]);
+  placeCamera(true);updateSun(true);renderer.shadowMap.needsUpdate=true;return true;
+}
+document.getElementById('gofire').onclick=goFireplace;
+document.getElementById('detail').onclick=e=>{state.detail=!state.detail;e.target.classList.toggle('on',state.detail);
+  const P=actors.player.g.position.clone(),L=actors.lize.g.position.clone(),cell=actors.cell;rebuild();
+  actors.cell=cell;actors.player.g.position.copy(P);actors.lize.g.position.copy(L);actors.history=Array(30).fill([L.x,L.z]);placeCamera(true);updateSun(true);};
+document.getElementById('zoom').onclick=e=>{state.near=!state.near;e.target.classList.toggle('on',state.near);resize();placeCamera(true);updateSun(true);renderer.shadowMap.needsUpdate=true;};
+if(params.get('detail')==='0'){state.detail=false;document.getElementById('detail').classList.remove('on');}
+if(params.get('near')==='1'){state.near=true;document.getElementById('zoom').classList.add('on');}
 addEventListener('resize',()=>{resize();placeCamera(true);});
-resize();rebuild();tick();
+resize();
+loadFireplace().finally(()=>{rebuild();if(params.get('fire')==='1')goFireplace();tick();});
 setTimeout(()=>document.getElementById('hint').remove(),6000);
 window.HD2D={state,get map(){return map},get scene(){return scene},rebuild,applyTime,applyFx,renderer};
 </script>
