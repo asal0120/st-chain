@@ -54,7 +54,7 @@ import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {HorizontalTiltShiftShader} from 'three/addons/shaders/HorizontalTiltShiftShader.js';
 import {VerticalTiltShiftShader} from 'three/addons/shaders/VerticalTiltShiftShader.js';
-import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {mergeGeometries,mergeGroups} from 'three/addons/utils/BufferGeometryUtils.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
 
@@ -192,7 +192,7 @@ function build(){
   if(scene)scene.traverse(o=>{if(o.geometry)o.geometry.dispose();});
   scene=new THREE.Scene();world=new THREE.Group();scene.add(world);
   lights={points:[],windows:[],shafts:[],lampHalos:[]};fadeables=[];
-  if(KIT.ready)lights.windows.push({facade:KIT.glassLit},{facade:KIT.glassWarm});
+  if(KIT.ready)lights.windows.push({facade:KIT.glassEve,dusk:.6,night:0},{facade:KIT.glassLate,dusk:.6,night:.9},{facade:KIT.glassWarm,dusk:.6,night:1});
   map=generateMap();
   document.getElementById('seedLabel').textContent='種子 '+map.seed;
   // 地圖外的暗色底面
@@ -336,12 +336,13 @@ function loadFireplace(){
 }
 /* ---------- 精細素材：街屋模組（assets/street-kit.glb） ----------
    每個模組一格寬、一層高。依每棟的樓層、寬度與一樓用途排起來，再依材質合併成少數幾塊。 */
-const KIT={ready:false,modules:{},mats:{},tex:{},styleMats:{},sideMats:{},paintMats:{}};
+const KIT={ready:false,modules:{},mats:{},tex:{},styleMats:{},sideMats:{},paintMats:{},loading:[]};
 const KIT_STYLES=['brick_red','brick_red','brick_stock','brick_soot','stucco'];
 const KIT_PAINT=['#2f4a3e','#5a1e24','#1d2a3a','#5a3a1e','#24262a','#6b5a2a','#3a2a4a'];
 function kitTexture(name){
   if(KIT.tex[name])return KIT.tex[name];
-  const t=new THREE.TextureLoader().load('assets/street/'+name+'.png');
+  let done;KIT.loading.push(new Promise(r=>done=r));
+  const t=new THREE.TextureLoader().load('assets/street/'+name+'.png',done,undefined,done);
   t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;t.magFilter=THREE.NearestFilter;t.minFilter=THREE.NearestMipmapLinearFilter;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=4;
   return KIT.tex[name]=t;
 }
@@ -354,12 +355,16 @@ function loadKit(){
       m.aoMap=ao;m.emissive.set(0);m.emissiveIntensity=0;KIT.mats[m.name]=m;
     });
     for(const c of [...g.scene.children])KIT.modules[c.name]=c;
-    // 夜間亮燈的窗：亮、暗兩種玻璃，每個窗戶模組各自決定
-    KIT.glassLit=KIT.mats.Glass.clone();KIT.glassLit.emissive.set(0xffc878);
+    // 亮燈的窗：glassEve 只在黃昏亮（晚上還醒著的人家、營業中的店），glassLate 深夜也亮（少數）
+    KIT.glassEve=KIT.mats.Glass.clone();KIT.glassEve.emissive.set(0xffc878);
+    KIT.glassLate=KIT.mats.Glass.clone();KIT.glassLate.emissive.set(0xffc878);
+    // 窗框、石材、油漆、鐵件等幾乎單色的小零件：合併時改用這一個材質，顏色寫在頂點上
+    KIT.flat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.7,aoMap:ao,name:'KitFlat'});
     KIT.glassWarm=KIT.mats.GlassWarm;KIT.glassWarm.emissive.set(0xffa040);KIT.glassWarm.emissiveMap=KIT.glassWarm.map;
     KIT.lamp=KIT.mats.Lamp;KIT.lamp.emissive.set(0xffc070);KIT.lamp.emissiveIntensity=4;
-    KIT.ready=true;
-  }).catch(e=>console.warn('街屋模組載入失敗',e));
+    for(const s of new Set(KIT_STYLES))kitTexture(s);
+    return Promise.all(KIT.loading);
+  }).then(()=>{KIT.ready=true;}).catch(e=>console.warn('街屋模組載入失敗',e));
 }
 function kitStyleMat(style){return KIT.styleMats[style]||(KIT.styleMats[style]=Object.assign(KIT.mats.Brick.clone(),{map:kitTexture(style)}));}
 function kitSideMat(style){return KIT.sideMats[style]||(KIT.sideMats[style]=new THREE.MeshStandardMaterial({map:kitTexture(style),roughness:.9}));}
@@ -368,9 +373,11 @@ function kitPaintMat(color){if(!KIT.paintMats[color]){const m=KIT.mats.Paint.clo
 function kitPut(g,list,key,x,y,z,style,paint,rr,rotY=0){
   const src=KIT.modules[key];if(!src)return null;
   const m=src.clone(true);m.position.set(x,y,z);m.rotation.y=rotY;g.add(m);list.push(m);
-  const lit=rr()<.45;
+  // 窗戶亮不亮：店面黃昏大多營業、深夜打烊；住家黃昏約四成亮，深夜只剩約一成
+  const v=rr(),shop=key==='G_SHOP'||key==='G_SHOPDOOR';
+  const glass=shop?(v<.85?KIT.glassEve:KIT.mats.Glass):v<.12?KIT.glassLate:v<.5?KIT.glassEve:KIT.mats.Glass;
   m.traverse(o=>{if(!o.isMesh)return;const n=o.material.name;
-    o.material=n==='Brick'?kitStyleMat(style):n==='Paint'?kitPaintMat(paint):n==='Glass'?(lit?KIT.glassLit:KIT.mats.Glass):o.material;});
+    o.material=n==='Brick'?kitStyleMat(style):n==='Paint'?kitPaintMat(paint):n==='Glass'?glass:o.material;});
   return m;
 }
 /* 街屋正面的模組。正面可能朝南（front）、朝東或朝西（side），朝北的建物（back）鏡頭看到的是後牆。
@@ -392,6 +399,8 @@ function kitFacade(g,o,W,D,FH,GH,style,rr,list){
     addPoint(o.x+p.x+m.x,1.52,o.y+p.z+m.z,0xffb860,6,5,KIT.lamp,{dayFactor:0});}
   return ground;
 }
+// 單色零件的顏色（取自 make_street_textures.py 的底色；油漆再乘上每棟的顏色）
+const KIT_FLAT={Frame:'#efebe0',Stone:'#cdc7b9',Paint:'#f2efe8',Iron:'#262a2e',Clay:'#a45a3a',Leaves:'#44663a',Gilt:'#c8a24c'};
 /* 一棟建物的模組依材質合併（每種材質一塊），減少繪製次數 */
 function mergeInto(g,roots){
   g.updateMatrixWorld(true);
@@ -402,8 +411,12 @@ function mergeInto(g,roots){
       const src=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone(),piece=new THREE.BufferGeometry();
       for(const n of ['position','normal','uv','uv1'])if(src.attributes[n])piece.setAttribute(n,src.attributes[n]);
       piece.applyMatrix4(rel.multiplyMatrices(inv,o.matrixWorld));
-      if(!buckets.has(o.material.uuid))buckets.set(o.material.uuid,{m:o.material,list:[]});
-      buckets.get(o.material.uuid).list.push(piece);
+      let m=o.material;const flat=KIT_FLAT[m.name];
+      if(flat&&KIT.flat){const c=new THREE.Color(flat);if(m.name==='Paint')c.multiply(m.color);
+        const n=piece.attributes.position.count,a=new Float32Array(n*3);for(let i=0;i<n;i++){a[i*3]=c.r;a[i*3+1]=c.g;a[i*3+2]=c.b;}
+        piece.setAttribute('color',new THREE.BufferAttribute(a,3));m=KIT.flat;}
+      if(!buckets.has(m.uuid))buckets.set(m.uuid,{m,list:[]});
+      buckets.get(m.uuid).list.push(piece);
     });
     g.remove(root);
   }
@@ -554,9 +567,13 @@ function building(o){
   let bx0=0,bx1=W,bz1=D;
   if(useKit){const sm=kitSideMat(style),dark=plain(0x18130f);faces[0]=faces[1]=faces[4]=sm;
     if(o.face==='side'){if(o.street==='east'){faces[0]=dark;bx1=W-.06;}else{faces[1]=dark;bx0=.06;}}
-    else{faces[4]=dark;bz1=D-.06;}}
+    else{faces[4]=dark;bz1=D-.06;}
+    faces[3]=faces[2];faces[5]=sm;}
   tex.repeat.set(1/visibleCols,1/H);em.repeat.set(1/visibleCols,1/H);
-  const body=mesh(box(bx1-bx0,H,bz1),faces);body.position.set((bx0+bx1)/2,H/2,bz1/2);g.add(body);
+  // 六個面依材質合併：同材質的面一次畫完
+  const bgeo=box(bx1-bx0,H,bz1),uniq=[...new Set(faces)];
+  for(const gr of bgeo.groups)gr.materialIndex=uniq.indexOf(faces[gr.materialIndex]);
+  const body=mesh(mergeGroups(bgeo),uniq);body.position.set((bx0+bx1)/2,H/2,bz1/2);g.add(body);
   const parts=[body];
   // 屋頂
   const rr=makeRng(o.seed^7),roofKind=o.key==='landmark'?'landmark':o.face==='back'?'flat':pick(rr,['gable','gable','flat','mansard']);
@@ -668,7 +685,7 @@ function applyTime(){
     if(p.mat)p.mat.emissiveIntensity=p.matBase*(k>0?Math.max(.4,k):0)+.05;}
   for(const s of lights.lampHalos)s.material.opacity=(indoor?(state.time==='day'?.25:.6):lampOn*.6);
   for(const w of lights.windows){
-    if(w.facade){w.facade.emissiveIntensity=state.time==='night'?1.6:state.time==='dusk'?.6:0;}
+    if(w.facade){w.facade.emissiveIntensity=state.time==='night'?(w.night??1.6):state.time==='dusk'?(w.dusk??.6):0;}
     else{w.emissive.set(state.time==='night'?0x3050a0:state.time==='dusk'?0xffb070:0xcfe2ff);w.emissiveIntensity=t.window;}
   }
   for(const s of lights.shafts){s.material.color.set(state.time==='night'?0x6a8cd8:state.time==='dusk'?0xffa060:0xfff0c8);s.material.opacity=state.time==='night'?.16:.22;}
@@ -689,10 +706,13 @@ function spriteMat(url){const t=loader.load(url);t.colorSpace=THREE.SRGBColorSpa
 function makeActor(url,w,h){
   const g=new THREE.Group();
   const geo=new THREE.PlaneGeometry(w,h);geo.translate(0,h/2,0);
-  const m=new THREE.Mesh(geo,spriteMat(url));m.castShadow=true;m.rotation.x=-.32;g.add(m);
+  const m=new THREE.Mesh(geo,spriteMat(url));m.rotation.x=-.32;g.add(m);
+  // 人物不畫進陰影圖（否則每走一步都要重算整片陰影），改在地上放一張依太陽方向拉長的人形影子
+  const shadow=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:m.material.map,color:0,transparent:true,opacity:.3,alphaTest:.05,depthWrite:false,side:THREE.DoubleSide}));
+  shadow.rotation.x=Math.PI/2;const pivot=new THREE.Group();pivot.position.y=.012;pivot.add(shadow);g.add(pivot);
   const blob=new THREE.Mesh(new THREE.CircleGeometry(.23,16),new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:.35,depthWrite:false}));
   blob.rotation.x=-Math.PI/2;blob.position.y=.015;blob.scale.set(1,.6,1);g.add(blob);
-  world.add(g);return {g,sprite:m,trail:[]};
+  world.add(g);return {g,sprite:m,blob,shadow,pivot,trail:[]};
 }
 function buildActors(){
   // 主角圖 832×1216（內容寬到 767）；莉澤圖 384×768。高度約 1.2 格（比現行探索版的 1.1 格略大，比街屋的門略矮）。
@@ -798,7 +818,8 @@ function tick(){
   }
   const companionMoving=actors.lize.sprite.position.y!==0;
   placeCamera(false);
-  if(updateSun(false)||moving||companionMoving)renderer.shadowMap.needsUpdate=true;
+  if(updateSun(false))renderer.shadowMap.needsUpdate=true;   // 陰影只在太陽換位置時重算；人物影子見 updateActorShadows
+  updateActorShadows();
   updateLightPool(dt,t);
   for(const f of flames)f.tex.offset.x=(Math.floor(t*11+f.phase)%4)/4;
   renderer.info.reset();
@@ -826,7 +847,31 @@ document.getElementById('toggle').onclick=e=>{const p=document.getElementById('p
 setOn('[data-type]','type',state.type);setOn('[data-time]','time',state.time);
 document.querySelectorAll('[data-fx]').forEach(b=>b.classList.toggle('on',state.fx[b.dataset.fx]));
 
-function rebuild(){flames.length=0;build();renderer.shadowMap.needsUpdate=true;renderPass.scene=scene;pixelPass.scene=scene;applyFx();placeCamera(true);}
+function rebuild(){flames.length=0;build();renderer.shadowMap.needsUpdate=true;renderPass.scene=scene;pixelPass.scene=scene;applyFx();placeCamera(true);warmUp();}
+/* 預熱：把整張地圖（含鏡頭外）畫一次，事先編譯著色程式、上傳模型與材質圖，
+   走進物件密集的地方時就不會臨時準備而卡頓 */
+function warmUp(){
+  const list=[];scene.traverse(o=>{if(o.frustumCulled){list.push(o);o.frustumCulled=false;}});
+  renderer.compile(scene,camera);renderer.render(scene,camera);
+  for(const o of list)o.frustumCulled=true;
+}
+/* 人物影子：方向背對太陽，長度依太陽高度；太陽越弱越淡 */
+function updateActorShadows(){
+  const s=lights.sun,vx=s.position.x-s.target.position.x,vy=Math.max(.1,s.position.y-s.target.position.y),vz=s.position.z-s.target.position.z;
+  const h=Math.hypot(vx,vz)||1,len=Math.min(1.6,Math.max(.35,h/vy)),rot=Math.atan2(-vx,-vz);
+  const op=(map.indoor?.24:.38)*Math.min(1,Math.max(.4,s.intensity/2.4));
+  for(const a of [actors.player,actors.lize]){const y=groundAt(a.g.position.x,a.g.position.z);
+    a.pivot.position.y=y+.012;a.blob.position.y=y+.015;
+    a.pivot.rotation.y=rot;a.shadow.scale.set(a.sprite.scale.x,len,1);a.shadow.material.opacity=op;}
+}
+/* 地面高度：街區的人行道（非車道）比路面高 0.1 格 */
+let groundCells=null;
+function groundAt(x,z){
+  if(map.indoor)return 0;
+  if(!groundCells||groundCells.map!==map){groundCells=new Map(map.cells.map(c=>[c.x+','+c.y,c]));groundCells.map=map;}
+  const c=groundCells.get(Math.floor(x)+','+Math.floor(z));
+  return c&&c.active&&!c.core?.1:0;
+}
 /* 把主角移到精細素材前面，方便比較：住宅是壁爐，倫敦是最高的一棟正面街屋 */
 function goFireplace(){
   let o,tx,ty;
